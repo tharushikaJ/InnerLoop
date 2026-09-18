@@ -1,0 +1,33 @@
+services:
+  frontend:
+    build: ./Frontend
+    container_name: innerloop-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./Backend
+    container_name: innerloop-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./Backend/.env
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    container_name: innerloop-postgres
+    environment:
+      POSTGRES_DB: innerloop_db
+      POSTGRES_USER: innerloop_user
+      POSTGRES_PASSWORD: innerloop_password
+    volumes:
+      - innerloop_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  innerloop_postgres_data:
