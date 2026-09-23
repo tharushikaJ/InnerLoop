@@ -21,6 +21,19 @@ JWT_ALGORITHM=HS256
 
 For shared or production environments, replace `JWT_SECRET` with a long, random secret and do not commit the `.env` file.
 
+The database host depends on where the backend runs:
+
+- Docker Compose backend: use `postgres:5432` as shown above. Docker resolves `postgres` to the PostgreSQL service.
+- FastAPI running directly on Windows: use `localhost:5432`, because PostgreSQL is published from the container to the host.
+
+For a direct local run, change only the database host in `Backend/.env` to:
+
+```env
+DATABASE_URL=postgresql://innerloop_user:innerloop_password@localhost:5432/innerloop_db
+```
+
+Restore `postgres:5432` before starting the backend with Docker Compose.
+
 ### 2. Build and start the services
 
 Run this command from the directory containing `docker-compose.yml`:
