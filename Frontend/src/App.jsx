@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, Route, Routes, useLocation } from "react-router-dom";
+import InternPods from "./pages/InternPods";
 import {
   Activity, ArrowRight, BarChart3, Bell, CalendarDays, CheckCircle2,
   CheckSquare, ChevronRight, DoorOpen, FolderKanban, LayoutDashboard,
@@ -245,7 +246,7 @@ export default function App() {
       <Route path="/projects/*" element={<WrappedPage><GenericPage name="Projects" /></WrappedPage>} />
       <Route path="/tasks/*" element={<WrappedPage><GenericPage name="Tasks" /></WrappedPage>} />
       <Route path="/meetings/*" element={<WrappedPage><GenericPage name="Meetings" /></WrappedPage>} />
-      <Route path="/intern-pods/*" element={<WrappedPage><GenericPage name="Intern Pods" /></WrappedPage>} />
+      <Route path="/intern-pods/*" element={<WrappedPage><InternPods /></WrappedPage>} />
       
       <Route path="/meeting-room/*" element={<WrappedPage><GenericPage name="Meeting Rooms" /></WrappedPage>} />
       <Route path="/users/*" element={<WrappedPage><GenericPage name="Users" /></WrappedPage>} />

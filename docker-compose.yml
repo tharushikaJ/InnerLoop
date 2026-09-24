@@ -23,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: innerloop_db
       POSTGRES_USER: innerloop_user
-      POSTGRES_PASSWORD: innerloop_password
+      POSTGRES_PASSWORD: innerloop_1234
     volumes:
       - innerloop_postgres_data:/var/lib/postgresql/data
     ports:
