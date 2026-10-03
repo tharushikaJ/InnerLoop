@@ -1,6 +1,14 @@
 from datetime import date
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
+
+
+class TaskSubmissionUpdate(BaseModel):
+    completion_evidence_link: str | None = None
+    submission_status: Literal["Not submitted", "Submitted"] = "Submitted"
+    progress_note: str | None = None
 
 
 class TaskResponse(BaseModel):
@@ -16,5 +24,7 @@ class TaskResponse(BaseModel):
     progress_note: str | None = None
     created_source: str | None = None
     completion_evidence_link: str | None = None
+    submission_status: str = "Not submitted"
+    supervisor_feedback: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

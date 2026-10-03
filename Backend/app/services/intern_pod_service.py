@@ -1,46 +1,46 @@
-from typing import List, Optional
-
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models.intern_pod import InternPod, InternPodMember
-from ..schemas.intern_pod_schema import (
-    InternPodCreate,
-    InternPodMemberCreate,
-    InternPodMemberUpdate,
-    InternPodUpdate,
-)
+from ..models.user import User
+from ..schemas.intern_pod_schema import InternPodCreate, InternPodMemberCreate, InternPodUpdate
 
 
-def get_intern_pods(db: Session, project_id: Optional[int] = None) -> List[InternPod]:
-    query = db.query(InternPod)
-    if project_id is not None:
-        query = query.filter(InternPod.assigned_project_id == project_id)
-    return query.order_by(InternPod.created_at.desc()).all()
-
-
-def get_intern_pod_by_id(db: Session, pod_id: int) -> InternPod:
+def get_intern_pod(db: Session, pod_id: int) -> InternPod:
     pod = db.query(InternPod).filter(InternPod.id == pod_id).first()
     if not pod:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intern pod not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intern pod not found")
     return pod
+
+
+def list_intern_pods(db: Session) -> list[InternPod]:
+    return db.query(InternPod).order_by(InternPod.updated_at.desc()).all()
+
+
+def list_mentors(db: Session) -> list[User]:
+    return db.query(User).filter(User.role == "employee").order_by(User.name.asc()).all()
+
+
+def list_interns(db: Session) -> list[User]:
+    return db.query(User).filter(User.role == "intern").order_by(User.name.asc()).all()
 
 
 def create_intern_pod(db: Session, payload: InternPodCreate) -> InternPod:
     pod = InternPod(**payload.model_dump())
     db.add(pod)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected project or mentor does not exist") from error
     db.refresh(pod)
     return pod
 
 
 def update_intern_pod(db: Session, pod_id: int, payload: InternPodUpdate) -> InternPod:
-    pod = get_intern_pod_by_id(db, pod_id)
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
+    pod = get_intern_pod(db, pod_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(pod, field, value)
     db.commit()
     db.refresh(pod)
@@ -48,67 +48,27 @@ def update_intern_pod(db: Session, pod_id: int, payload: InternPodUpdate) -> Int
 
 
 def delete_intern_pod(db: Session, pod_id: int) -> None:
-    pod = get_intern_pod_by_id(db, pod_id)
-    db.delete(pod)
+    db.delete(get_intern_pod(db, pod_id))
     db.commit()
 
 
-def get_intern_pod_members(db: Session, pod_id: int) -> List[InternPodMember]:
-    get_intern_pod_by_id(db, pod_id)
-    return (
-        db.query(InternPodMember)
-        .filter(InternPodMember.pod_id == pod_id)
-        .order_by(InternPodMember.created_at.desc())
-        .all()
-    )
-
-
-def add_member_to_pod(db: Session, pod_id: int, payload: InternPodMemberCreate) -> InternPodMember:
-    get_intern_pod_by_id(db, pod_id)
+def add_member(db: Session, pod_id: int, payload: InternPodMemberCreate) -> InternPodMember:
+    get_intern_pod(db, pod_id)
     member = InternPodMember(pod_id=pod_id, **payload.model_dump())
     db.add(member)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User does not exist or is already assigned to this pod") from error
     db.refresh(member)
     return member
 
 
-def update_member_in_pod(
-    db: Session,
-    pod_id: int,
-    member_id: int,
-    payload: InternPodMemberUpdate,
-) -> InternPodMember:
-    get_intern_pod_by_id(db, pod_id)
-    member = (
-        db.query(InternPodMember)
-        .filter(InternPodMember.id == member_id, InternPodMember.pod_id == pod_id)
-        .first()
-    )
+def remove_member(db: Session, pod_id: int, member_id: int) -> None:
+    get_intern_pod(db, pod_id)
+    member = db.query(InternPodMember).filter(InternPodMember.id == member_id, InternPodMember.pod_id == pod_id).first()
     if not member:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intern pod member not found",
-        )
-
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(member, field, value)
-    db.commit()
-    db.refresh(member)
-    return member
-
-
-def remove_member_from_pod(db: Session, pod_id: int, member_id: int) -> None:
-    get_intern_pod_by_id(db, pod_id)
-    member = (
-        db.query(InternPodMember)
-        .filter(InternPodMember.id == member_id, InternPodMember.pod_id == pod_id)
-        .first()
-    )
-    if not member:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Intern pod member not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intern pod member not found")
     db.delete(member)
     db.commit()

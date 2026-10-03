@@ -103,6 +103,8 @@ CREATE TABLE tasks (
     progress_note TEXT,
     created_source VARCHAR(100),
     completion_evidence_link TEXT,
+    submission_status VARCHAR(50) NOT NULL DEFAULT 'Not submitted',
+    supervisor_feedback TEXT,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +116,12 @@ CREATE TABLE tasks (
 
     CONSTRAINT fk_task_user
         FOREIGN KEY (assigned_user_id)
-        REFERENCES users(id)
+        REFERENCES users(id),
+
+    CONSTRAINT fk_task_intern_pod
+        FOREIGN KEY (assigned_intern_pod_id)
+        REFERENCES intern_pods(id)
+        ON DELETE SET NULL
 );
 
 

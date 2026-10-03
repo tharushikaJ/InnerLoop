@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import BigInteger, Date, DateTime, Integer, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
 
@@ -21,6 +21,11 @@ class InternPod(Base):
     progress_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    members: Mapped[list["InternPodMember"]] = relationship(
+        back_populates="pod",
+        cascade="all, delete-orphan",
+        primaryjoin="InternPod.id == foreign(InternPodMember.pod_id)",
+    )
 
 
 class InternPodMember(Base):
@@ -31,3 +36,7 @@ class InternPodMember(Base):
     intern_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    pod: Mapped[InternPod] = relationship(
+        back_populates="members",
+        primaryjoin="foreign(InternPodMember.pod_id) == InternPod.id",
+    )

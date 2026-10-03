@@ -14,8 +14,6 @@ services:
       - "8000:8000"
     env_file:
       - ./Backend/.env
-    environment:
-      DATABASE_URL: postgresql://innerloop_user:innerloop_password@postgres:5432/innerloop_db
     depends_on:
       - postgres
 

@@ -14,6 +14,10 @@ import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Register from "./pages/Register";
+import InternPods from "./pages/InternPods";
+import Tasks from "./pages/Tasks";
+import Meetings from "./pages/Meetings";
+import MeetingRoom from "./pages/MeetingRoom";
 
 const commonItems = {
   overview: { label: "Overview", path: "/dashboard", icon: LayoutDashboard },
@@ -179,13 +183,13 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<WrappedPage><Dashboard /></WrappedPage>} />
         <Route path="/projects/*" element={<WrappedPage><ApiPage name="Projects" load={workspaceApi.projects} /></WrappedPage>} />
-        <Route path="/tasks/*" element={<WrappedPage><ApiPage name="Tasks" load={workspaceApi.tasks} /></WrappedPage>} />
+        <Route path="/tasks/*" element={<WrappedPage><Tasks /></WrappedPage>} />
         <Route path="/profile" element={<WrappedPage><Profile /></WrappedPage>} />
         <Route element={<RoleProtectedRoute allowedRoles={["employee", "management"]} />}>
-          <Route path="/meetings/*" element={<WrappedPage><ApiPage name="Meetings" load={workspaceApi.meetings} /></WrappedPage>} />
-          <Route path="/intern-pods/*" element={<WrappedPage><ApiPage name="Intern Pods" load={workspaceApi.internPods} /></WrappedPage>} />
+          <Route path="/meetings/*" element={<WrappedPage><Meetings /></WrappedPage>} />
+          <Route path="/intern-pods/*" element={<WrappedPage><InternPods /></WrappedPage>} />
           <Route path="/reports/*" element={<WrappedPage><ApiPage name="Reports" load={workspaceApi.reportSummary} /></WrappedPage>} />
-          <Route path="/meeting-room/*" element={<WrappedPage><ApiPage name="Meeting Rooms" load={workspaceApi.meetingRooms} /></WrappedPage>} />
+          <Route path="/meeting-room/*" element={<WrappedPage><MeetingRoom /></WrappedPage>} />
         </Route>
         <Route element={<RoleProtectedRoute allowedRoles={["management"]} />}>
           <Route path="/users/*" element={<WrappedPage><ApiPage name="Users" load={workspaceApi.users} /></WrappedPage>} />
