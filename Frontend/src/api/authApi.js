@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -8,9 +8,16 @@ export class ApiError extends Error {
   }
 }
 
-function errorMessage(detail) {
+function errorMessage(detail, status) {
   if (typeof detail === "string") return detail;
-  if (Array.isArray(detail) && detail.length) return detail[0].msg || "Please check the form and try again.";
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((item) => item.msg).filter(Boolean).join(" ") || "Please check the form and try again.";
+  }
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to perform this action.";
+  if (status === 404) return "The requested record was not found.";
+  if (status === 422) return "Please check the submitted information and try again.";
+  if (status >= 500) return "The InnerLoop API encountered an error. Please try again.";
   return "Something went wrong. Please try again.";
 }
 
@@ -27,12 +34,11 @@ export async function apiRequest(path, options = {}) {
       },
     });
   } catch {
-    const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
-    throw new ApiError(`Cannot reach the InnerLoop API at ${apiOrigin}. Confirm the backend is running and try again.`, 0);
+    throw new ApiError("Cannot reach the InnerLoop API. Confirm the backend is running and try again.", 0);
   }
 
   const data = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(errorMessage(data?.detail), response.status);
+  if (!response.ok) throw new ApiError(errorMessage(data?.detail, response.status), response.status);
   return data;
 }
 

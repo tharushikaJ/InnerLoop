@@ -1,15 +1,13 @@
 from datetime import date, datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..models.intern_pod import InternPod
-from ..models.meeting import Meeting
-from ..models.project import Project
-from ..models.task import Task
+from ..models.meeting import Meeting, MeetingAttendee
 from ..models.user import User
-from .project_service import projects_for_user
-from .task_service import tasks_for_user
+from .project_service import project_data, projects_for_user
+from .task_service import task_data, tasks_for_user
 
 
 DONE_STATUSES = {"completed", "done", "closed"}
@@ -23,29 +21,35 @@ def dashboard_for_user(db: Session, user: User) -> dict:
 
     metrics = {
         "projects": len(projects),
+        "total_projects": len(projects),
         "open_tasks": len(open_tasks),
+        "total_tasks": len(tasks),
+        "in_progress_tasks": len([task for task in tasks if (task.status or "").lower() in {"in progress", "in-progress", "active", "review", "in review"}]),
         "overdue_tasks": len(overdue_tasks),
         "completed_tasks": len(tasks) - len(open_tasks),
+        "completed_projects": len([project for project in projects if (project.current_status or "").lower() in DONE_STATUSES]),
+        "average_progress": round(sum(float(project.progress_percentage or 0) for project in projects) / len(projects)) if projects else 0,
+        "active_projects": len([
+            project for project in projects
+            if (project.current_status or "").lower() in {"active", "in progress", "on track"}
+        ]),
     }
     meetings = []
     pod_progress = []
 
     if user.role in {"employee", "management"}:
-        meetings = (
-            db.query(Meeting)
-            .filter(Meeting.start_datetime >= datetime.now())
-            .order_by(Meeting.start_datetime.asc())
-            .limit(5)
-            .all()
-        )
-        metrics["upcoming_meetings"] = len(meetings)
+        meeting_query = db.query(Meeting).filter(Meeting.start_datetime >= datetime.now())
+        if user.role == "employee":
+            attending_ids = db.query(MeetingAttendee.meeting_id).filter(MeetingAttendee.user_id == user.id)
+            meeting_query = meeting_query.filter(or_(Meeting.created_by == user.id, Meeting.id.in_(attending_ids)))
+        metrics["upcoming_meetings"] = meeting_query.count()
+        meetings = meeting_query.order_by(Meeting.start_datetime.asc()).limit(5).all()
 
     if user.role == "management":
-        lowered_status = func.lower(func.coalesce(Project.current_status, ""))
         metrics.update({
-            "active_projects": db.query(Project).filter(lowered_status.in_(["active", "in progress", "on track"])).count(),
-            "delayed_projects": db.query(Project).filter(lowered_status == "delayed").count(),
-            "blocked_projects": db.query(Project).filter(lowered_status == "blocked").count(),
+            "delayed_projects": len([project for project in projects if (project.current_status or "").lower() == "delayed"]),
+            "blocked_projects": len([project for project in projects if (project.current_status or "").lower() == "blocked"]),
+            "active_pods": db.query(InternPod).filter(func.lower(func.coalesce(InternPod.status, "")) == "active").count(),
         })
         pods = db.query(InternPod).order_by(InternPod.updated_at.desc()).limit(8).all()
         pod_progress = [
@@ -58,11 +62,17 @@ def dashboard_for_user(db: Session, user: User) -> dict:
             for pod in pods
         ]
 
+    upcoming_deadlines = [
+        task for task in tasks
+        if task.due_date and task.due_date >= date.today() and (task.status or "").lower() not in DONE_STATUSES
+    ][:6]
+
     return {
         "role": user.role,
         "metrics": metrics,
-        "projects": projects[:5],
-        "tasks": tasks[:8],
+        "projects": [project_data(db, project) for project in projects[:5]],
+        "tasks": [task_data(db, task) for task in tasks[:8]],
         "meetings": meetings,
         "pod_progress": pod_progress,
+        "upcoming_deadlines": [task_data(db, task) for task in upcoming_deadlines],
     }

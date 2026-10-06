@@ -1,0 +1,116 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  AlertTriangle, ArrowRight, CalendarDays, CheckCircle2,
+  CheckSquare, Clock3, FolderKanban, LoaderCircle, RefreshCw, Sparkles,
+  Target, Users,
+} from "lucide-react";
+
+import { getDashboard } from "../api/dashboardApi";
+import { useAuth } from "../context/AuthContext";
+
+const DONE = new Set(["completed", "complete", "done", "closed", "approved"]);
+
+function normalized(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function formatDate(value, includeTime = false) {
+  if (!value) return "Not scheduled";
+  const parsed = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  return new Intl.DateTimeFormat("en", includeTime
+    ? { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }
+    : { day: "numeric", month: "short", year: "numeric" }).format(parsed);
+}
+
+function toneForStatus(status) {
+  const value = normalized(status);
+  if (DONE.has(value)) return "bg-emerald-50 text-emerald-700";
+  if (["blocked", "delayed", "at risk", "at-risk"].includes(value)) return "bg-rose-50 text-rose-700";
+  if (["active", "in progress", "in-progress", "on track", "scheduled"].includes(value)) return "bg-blue-50 text-[#075fae]";
+  return "bg-slate-100 text-slate-600";
+}
+
+function MetricCard({ icon: Icon, label, value, detail, to, tone = "blue" }) {
+  const color = tone === "green" ? "bg-emerald-50 text-emerald-600" : tone === "rose" ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-[#075fae]";
+  const content = <><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${color}`}><Icon size={20} /></span><span className="min-w-0"><span className="block text-[10px] font-black uppercase tracking-[.15em] text-slate-400">{label}</span><strong className="mt-1 block text-2xl font-black text-[#10233f]">{value}</strong><span className="mt-1 block truncate text-[11px] text-slate-400">{detail}</span></span>{to && <ArrowRight className="ml-auto text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#075fae]" size={16} />}</>;
+  return to ? <Link className="stat-card group" to={to}>{content}</Link> : <article className="stat-card">{content}</article>;
+}
+
+function EmptyState({ icon: Icon, title, detail }) {
+  return <div className="rounded-2xl border border-dashed border-slate-200 px-5 py-10 text-center"><Icon className="mx-auto text-slate-300" size={28} /><p className="mt-3 text-sm font-extrabold text-slate-600">{title}</p><p className="mt-1 text-xs leading-5 text-slate-400">{detail}</p></div>;
+}
+
+function SectionHeader({ eyebrow, title, to, linkLabel }) {
+  return <div className="mb-5 flex items-end justify-between gap-4"><div><p className="eyebrow text-[#0871c6]">{eyebrow}</p><h3 className="section-title">{title}</h3></div>{to && <Link className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#075fae] hover:underline" to={to}>{linkLabel}<ArrowRight size={13} /></Link>}</div>;
+}
+
+function ProjectList({ projects }) {
+  if (!projects.length) return <EmptyState icon={FolderKanban} title="No projects in your workspace" detail="Projects assigned to your role will appear here." />;
+  return <div className="space-y-2">{projects.map((project) => {
+    const progress = Math.max(0, Math.min(100, Number(project.progress_percentage) || 0));
+    return <div className="rounded-2xl border border-slate-100 p-4" key={project.id}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black text-[#10233f]">{project.project_name}</p><p className="mt-1 truncate text-xs text-slate-400">{project.responsible_employee_name || project.project_category || "No responsible employee"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${toneForStatus(project.current_status)}`}>{project.current_status || "Not set"}</span></div><div className="mt-4 flex items-center justify-between text-[11px]"><span className="font-bold text-slate-500">Progress</span><b className="text-[#075fae]">{Math.round(progress)}%</b></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#20b51d] to-[#0871c6]" style={{ width: `${progress}%` }} /></div></div>;
+  })}</div>;
+}
+
+function TaskList({ tasks, emptyTitle = "No tasks assigned" }) {
+  if (!tasks.length) return <EmptyState icon={CheckSquare} title={emptyTitle} detail="New assigned work will appear here automatically." />;
+  return <div className="divide-y divide-slate-100">{tasks.map((task) => <div className="flex items-start gap-3 py-4 first:pt-0 last:pb-0" key={task.id}><span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${DONE.has(normalized(task.status)) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#075fae]"}`}>{DONE.has(normalized(task.status)) ? <CheckCircle2 size={17} /> : <Clock3 size={17} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="truncate text-sm font-extrabold text-[#10233f]">{task.task_title}</p><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${toneForStatus(task.status)}`}>{task.status || "To do"}</span></div><p className="mt-1 truncate text-xs text-slate-400">{task.project_name || "Independent task"}{task.assigned_user_name ? ` · ${task.assigned_user_name}` : ""}</p><div className="mt-2 flex flex-wrap gap-3 text-[10px] font-bold text-slate-400"><span>{task.priority || "Normal"} priority</span><span>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</span></div></div></div>)}</div>;
+}
+
+function MeetingList({ meetings }) {
+  if (!meetings.length) return <EmptyState icon={CalendarDays} title="No upcoming meetings" detail="Scheduled meetings relevant to you will appear here." />;
+  return <div className="space-y-3">{meetings.map((meeting) => <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4" key={meeting.id}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#075fae] shadow-sm"><CalendarDays size={18} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold text-[#10233f]">{meeting.meeting_title}</p><p className="mt-1 text-xs text-slate-400">{formatDate(meeting.start_datetime, true)} · {meeting.meeting_type || "Meeting"}</p></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${toneForStatus(meeting.status)}`}>{meeting.status || "Scheduled"}</span></div>)}</div>;
+}
+
+export default function Dashboard() {
+  const { user } = useAuth();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true); setError("");
+    try { setData(await getDashboard()); }
+    catch (requestError) { setError(requestError.message || "Unable to load the overview."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="content-card flex items-center justify-center gap-2 py-20 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={19} /> Loading your workspace...</div>;
+  if (error) return <div className="content-card border-rose-100 bg-rose-50"><AlertTriangle className="text-rose-500" size={24} /><p className="mt-3 font-extrabold text-rose-800">Overview unavailable</p><p className="mt-1 text-sm text-rose-700">{error}</p><button className="secondary-button mt-5" onClick={load}><RefreshCw size={16} /> Try again</button></div>;
+
+  const role = user?.role || data?.role;
+  const metrics = data?.metrics || {};
+  const metricCards = role === "management" ? [
+    [FolderKanban, "Active projects", metrics.active_projects, "Portfolio in motion", "/projects", "green"],
+    [CheckSquare, "Total tasks", metrics.total_tasks, "All delivery work", "/tasks", "blue"],
+    [CheckCircle2, "Completed tasks", metrics.completed_tasks, "Finished work", "/tasks", "green"],
+    [AlertTriangle, "Overdue tasks", metrics.overdue_tasks, "Needs attention", "/tasks", "rose"],
+    [CalendarDays, "Upcoming meetings", metrics.upcoming_meetings, "Scheduled ahead", "/meetings", "blue"],
+    [Users, "Active intern pods", metrics.active_pods, "Pods currently active", "/intern-pods", "green"],
+  ] : [
+    [FolderKanban, "Active projects", metrics.active_projects, "Your current projects", "/projects", "green"],
+    [CheckSquare, "Assigned tasks", metrics.total_tasks, "Your delivery queue", "/tasks", "blue"],
+    [CheckCircle2, "Completed tasks", metrics.completed_tasks, "Work completed", "/tasks", "green"],
+    [AlertTriangle, "Overdue tasks", metrics.overdue_tasks, "Needs attention", "/tasks", "rose"],
+    [CalendarDays, "Upcoming meetings", metrics.upcoming_meetings || 0, "Relevant meetings", role === "intern" ? null : "/meetings", "blue"],
+    [Target, "Average progress", `${metrics.average_progress || 0}%`, "Across visible projects", "/projects", "green"],
+  ];
+
+  return <div className="space-y-6">
+    <section className="hero-panel"><div className="hero-loop hero-loop-green" aria-hidden="true" /><div className="hero-loop hero-loop-blue" aria-hidden="true" /><div className="relative z-10 max-w-[720px]"><div className="inline-flex items-center gap-2 rounded-full border border-[#20b51d]/20 bg-[#edfbed] px-3 py-1.5 text-[10px] font-black uppercase tracking-[.16em] text-[#168f18]"><Sparkles size={13} /> Your workspace</div><h2 className="mt-6 text-[38px] font-black leading-[1.08] tracking-[-.045em] text-[#10233f] sm:text-[52px]">Good to see you, <span className="text-[#075fae]">{user?.name}</span>.</h2><p className="mt-5 max-w-[620px] text-sm leading-7 text-slate-500 sm:text-base">Keep your projects, tasks, deadlines and team activity organized in one workspace.</p><div className="mt-7 flex flex-wrap gap-3"><Link className="primary-button" to="/projects">View projects <ArrowRight size={16} /></Link><Link className="secondary-button" to="/tasks">View tasks <ArrowRight size={16} /></Link></div></div></section>
+
+    <section><div className="mb-4"><p className="eyebrow text-[#199d1c]">Live workspace data</p><h3 className="section-title">At a glance</h3></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">{metricCards.map(([Icon, label, value, detail, to, tone]) => <MetricCard key={label} icon={Icon} label={label} value={value ?? 0} detail={detail} to={to} tone={tone} />)}</div></section>
+
+    <section className="grid gap-6 xl:grid-cols-2">
+      <article className="content-card"><SectionHeader eyebrow="Portfolio" title="Recent projects" to="/projects" linkLabel="All projects" /><ProjectList projects={data.projects || []} /></article>
+      <article className="content-card"><SectionHeader eyebrow="Delivery calendar" title="Upcoming deadlines" to="/tasks" linkLabel="Task board" /><TaskList tasks={data.upcoming_deadlines || []} emptyTitle="No upcoming deadlines" /></article>
+      <article className="content-card"><SectionHeader eyebrow="Work queue" title={role === "management" ? "Recent tasks" : "Assigned tasks"} to="/tasks" linkLabel="All tasks" /><TaskList tasks={data.tasks || []} /></article>
+      {role !== "intern" && <article className="content-card"><SectionHeader eyebrow="Team calendar" title="Upcoming meetings" to="/meetings" linkLabel="All meetings" /><MeetingList meetings={data.meetings || []} /></article>}
+    </section>
+
+    <section className="content-card"><SectionHeader eyebrow="Portfolio health" title="Project progress" to="/projects" linkLabel="Open portfolio" />{(data.projects || []).length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{data.projects.map((project) => { const progress = Math.max(0, Math.min(100, Number(project.progress_percentage) || 0)); return <div className="rounded-2xl bg-slate-50 p-4" key={project.id}><div className="flex items-start justify-between gap-3"><p className="text-sm font-extrabold text-[#10233f]">{project.project_name}</p><b className="text-sm text-[#075fae]">{Math.round(progress)}%</b></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-gradient-to-r from-[#20b51d] to-[#0871c6]" style={{ width: `${progress}%` }} /></div><p className="mt-3 line-clamp-1 text-xs text-slate-400">{project.current_progress_update || project.next_activity || "No progress update yet"}</p></div>; })}</div> : <EmptyState icon={Target} title="No project progress yet" detail="Progress appears as projects are assigned and updated." />}</section>
+  </div>;
+}

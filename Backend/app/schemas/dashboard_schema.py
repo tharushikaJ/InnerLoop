@@ -14,3 +14,4 @@ class DashboardResponse(BaseModel):
     tasks: list[TaskResponse]
     meetings: list[MeetingResponse] = Field(default_factory=list)
     pod_progress: list[dict[str, Any]] = Field(default_factory=list)
+    upcoming_deadlines: list[TaskResponse] = Field(default_factory=list)

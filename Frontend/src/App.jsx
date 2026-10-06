@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
-  ArrowRight, BarChart3, Bell, CalendarDays, CheckSquare, ChevronRight,
+  BarChart3, Bell, CalendarDays, CheckSquare, ChevronRight,
   DoorOpen, FolderKanban, LayoutDashboard, LogOut, Menu, Search, Settings,
   ShieldCheck, Sparkles, Users, X,
 } from "lucide-react";
@@ -14,7 +14,9 @@ import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
 import InternPods from "./pages/InternPods";
+import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
 import Meetings from "./pages/Meetings";
 import MeetingRoom from "./pages/MeetingRoom";
@@ -33,7 +35,7 @@ const commonItems = {
 };
 
 const navigationByRole = {
-  intern: [{ section: "MAIN", items: [commonItems.overview, { ...commonItems.projects, label: "Assigned Projects" }, { ...commonItems.tasks, label: "Assigned Tasks" }] }],
+  intern: [{ section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks] }],
   employee: [
     { section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks, commonItems.meetings] },
     { section: "MANAGEMENT", items: [commonItems.pods, commonItems.rooms, commonItems.reports] },
@@ -96,10 +98,6 @@ function NotificationPanel({ open, onClose }) {
   return <div className="fixed right-5 top-[88px] z-40 w-[min(360px,calc(100vw-40px))] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 sm:right-8 lg:right-10"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="font-extrabold text-slate-900">Notifications</p><p className="text-xs text-slate-400">Workspace activity</p></div><button onClick={onClose} className="icon-button"><X size={18} /></button></div><div className="p-6 text-center"><Bell className="mx-auto text-slate-300" size={24} /><p className="mt-3 text-sm font-bold text-slate-600">You’re all caught up</p><p className="mt-1 text-xs text-slate-400">New activity will appear here.</p></div></div>;
 }
 
-function StatCard({ icon: Icon, label, value, color }) {
-  return <article className="stat-card group"><div className={`grid h-12 w-12 place-items-center rounded-full ${color === "green" ? "bg-[#def5dc] text-[#1aaa1c]" : "bg-[#e3f2ff] text-[#0765b8]"}`}><Icon size={21} /></div><div className="min-w-0"><p className="text-sm font-semibold text-slate-500">{label}</p><p className="mt-1 text-[30px] font-black leading-none tracking-tight text-[#10233f]">{value}</p></div><span className="ml-auto text-[10px] font-extrabold uppercase tracking-wider text-[#21a91e]">Live</span></article>;
-}
-
 function LoadingPanel() { return <div className="content-card animate-pulse text-sm font-semibold text-slate-400">Loading workspace data...</div>; }
 function ErrorPanel({ message }) { return <div className="content-card border border-red-100 bg-red-50 text-sm font-semibold text-red-700">{message}</div>; }
 function EmptyPanel({ label }) { return <div className="rounded-2xl border border-dashed border-slate-200 px-5 py-10 text-center text-sm text-slate-400">No {label.toLowerCase()} are available.</div>; }
@@ -116,36 +114,6 @@ function DataList({ title, items = [], emptyLabel, type }) {
         return <div className="flex items-center gap-4 py-4" key={`${type}-${item.id ?? itemTitle}`}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e5f3ff] text-[#0969b9]"><ChevronRight size={17} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold text-slate-800">{itemTitle}</p><p className="mt-1 truncate text-xs text-slate-400">{detail || status || "No additional details"}</p>{progress !== undefined && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#20ac22]" style={{ width: `${Math.min(Number(progress) || 0, 100)}%` }} /></div>}</div>{status && <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-extrabold capitalize text-slate-600">{status}</span>}</div>;
       })}</div>}
     </section>
-  );
-}
-
-function Dashboard() {
-  const { user } = useAuth();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    workspaceApi.dashboard().then((result) => active && setData(result)).catch((requestError) => active && setError(requestError.message || "Unable to load the dashboard."));
-    return () => { active = false; };
-  }, []);
-
-  if (error) return <ErrorPanel message={error} />;
-  if (!data) return <LoadingPanel />;
-
-  const role = user?.role || data.role;
-  const metricConfig = role === "management"
-    ? [[FolderKanban, "Active projects", "active_projects", "green"], [BarChart3, "Delayed projects", "delayed_projects", "blue"], [ShieldCheck, "Blocked projects", "blocked_projects", "green"], [CheckSquare, "Overdue tasks", "overdue_tasks", "blue"]]
-    : role === "employee"
-      ? [[FolderKanban, "Projects", "projects", "green"], [CheckSquare, "Open tasks", "open_tasks", "blue"], [CalendarDays, "Upcoming meetings", "upcoming_meetings", "green"], [ShieldCheck, "Overdue tasks", "overdue_tasks", "blue"]]
-      : [[FolderKanban, "Assigned projects", "projects", "green"], [CheckSquare, "Open tasks", "open_tasks", "blue"], [ShieldCheck, "Overdue tasks", "overdue_tasks", "green"], [CheckSquare, "Completed tasks", "completed_tasks", "blue"]];
-
-  return (
-    <div className="space-y-7">
-      <section className="hero-panel"><div className="hero-loop hero-loop-green" aria-hidden="true" /><div className="hero-loop hero-loop-blue" aria-hidden="true" /><div className="relative z-10 max-w-[680px]"><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#20b51d]/20 bg-[#edfbed] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#168f18]"><span className="h-2 w-2 rounded-full bg-[#23b51f]" /> {role} workspace</div><h2 className="text-[38px] font-black leading-[1.08] tracking-[-0.045em] text-[#10233f] sm:text-[50px]">Welcome back, <span className="text-[#0767b7]">{user?.name}</span>.</h2><p className="mt-5 max-w-[580px] text-sm leading-7 text-slate-500 sm:text-base">Your dashboard is built from the work and permissions assigned to your role.</p><Link to="/projects" className="secondary-button mt-7 inline-flex">Open projects <ArrowRight size={17} /></Link></div></section>
-      <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">{metricConfig.map(([Icon, label, key, color]) => <StatCard key={key} icon={Icon} label={label} value={data.metrics[key] ?? 0} color={color} />)}</section>
-      <section className="grid gap-6 xl:grid-cols-2"><DataList title={role === "intern" ? "Assigned projects" : "Recent projects"} items={data.projects} emptyLabel="projects" type="project" /><DataList title={role === "intern" ? "Assigned tasks" : "Current tasks"} items={data.tasks} emptyLabel="tasks" type="task" />{role !== "intern" && <DataList title="Upcoming meetings" items={data.meetings} emptyLabel="meetings" type="meeting" />}{role === "management" && <DataList title="Intern pod progress" items={data.pod_progress} emptyLabel="intern pods" type="pod" />}</section>
-    </div>
   );
 }
 
@@ -182,7 +150,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<WrappedPage><Dashboard /></WrappedPage>} />
-        <Route path="/projects/*" element={<WrappedPage><ApiPage name="Projects" load={workspaceApi.projects} /></WrappedPage>} />
+        <Route path="/projects/*" element={<WrappedPage><Projects /></WrappedPage>} />
         <Route path="/tasks/*" element={<WrappedPage><Tasks /></WrappedPage>} />
         <Route path="/profile" element={<WrappedPage><Profile /></WrappedPage>} />
         <Route element={<RoleProtectedRoute allowedRoles={["employee", "management"]} />}>

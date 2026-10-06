@@ -103,8 +103,7 @@ CREATE TABLE tasks (
     progress_note TEXT,
     created_source VARCHAR(100),
     completion_evidence_link TEXT,
-    submission_status VARCHAR(50) NOT NULL DEFAULT 'Not submitted',
-    supervisor_feedback TEXT,
+    
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

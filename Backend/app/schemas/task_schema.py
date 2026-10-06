@@ -1,13 +1,41 @@
 from datetime import date
 
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
 
-from pydantic import BaseModel, ConfigDict
+
+class TaskCreate(BaseModel):
+    task_title: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    project_id: int | None = None
+    assigned_user_id: int | None = None
+    assigned_intern_pod_id: int | None = None
+    priority: str = Field(default="Medium", max_length=50)
+    status: str = Field(default="To do", max_length=50)
+    due_date: date | None = None
+    progress_note: str | None = None
+    created_source: str = "Employee workspace"
+
+
+class TaskUpdate(BaseModel):
+    project_id: int | None = None
+    assigned_user_id: int | None = None
+    assigned_intern_pod_id: int | None = None
+    priority: str | None = Field(default=None, max_length=50)
+    status: str | None = Field(default=None, max_length=50)
+    due_date: date | None = None
+    progress_note: str | None = None
+    completion_evidence_link: str | None = None
+
+
+class TaskOptionsResponse(BaseModel):
+    projects: list[dict]
+    assignees: list[dict]
+    interns: list[dict]
+    pods: list[dict]
 
 
 class TaskSubmissionUpdate(BaseModel):
     completion_evidence_link: str | None = None
-    submission_status: Literal["Not submitted", "Submitted"] = "Submitted"
     progress_note: str | None = None
 
 
@@ -24,7 +52,8 @@ class TaskResponse(BaseModel):
     progress_note: str | None = None
     created_source: str | None = None
     completion_evidence_link: str | None = None
-    submission_status: str = "Not submitted"
-    supervisor_feedback: str | None = None
+    project_name: str | None = None
+    assigned_user_name: str | None = None
+    assigned_intern_pod_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

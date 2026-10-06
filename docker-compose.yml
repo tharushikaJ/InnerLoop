@@ -14,6 +14,8 @@ services:
       - "8000:8000"
     env_file:
       - ./Backend/.env
+    environment:
+      DATABASE_URL: postgresql://innerloop_user:innerloop_password@postgres:5432/innerloop_db
     depends_on:
       - postgres
 
@@ -23,7 +25,7 @@ services:
     environment:
       POSTGRES_DB: innerloop_db
       POSTGRES_USER: innerloop_user
-      POSTGRES_PASSWORD: innerloop_1234
+      POSTGRES_PASSWORD: innerloop_password
     volumes:
       - innerloop_postgres_data:/var/lib/postgresql/data
       - ./Databases/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
