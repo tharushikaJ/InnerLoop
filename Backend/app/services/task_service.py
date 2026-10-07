@@ -36,6 +36,7 @@ def task_data(db: Session, task: Task) -> dict:
         "project_name": project_name,
         "assigned_user_name": user_name,
         "assigned_intern_pod_name": pod_name,
+        "submission_status": "Submitted" if task.completion_evidence_link or task.progress_note else "Not submitted",
     }
 
 

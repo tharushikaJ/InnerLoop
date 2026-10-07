@@ -52,6 +52,7 @@ class TaskResponse(BaseModel):
     progress_note: str | None = None
     created_source: str | None = None
     completion_evidence_link: str | None = None
+    submission_status: str = "Not submitted"
     project_name: str | None = None
     assigned_user_name: str | None = None
     assigned_intern_pod_name: str | None = None
