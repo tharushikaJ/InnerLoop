@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas.project_schema import ProjectCreate, ProjectOptionsResponse, ProjectResponse
-from ..services.project_service import create_project, project_options, project_records_for_user
+from ..schemas.project_schema import ProjectCreate, ProjectOptionsResponse, ProjectResponse, ProjectUpdate
+from ..services.project_service import create_project, delete_project, project_options, project_records_for_user, update_project
 from ..utils.permissions import get_current_user, require_roles
 
 
@@ -24,3 +24,13 @@ def options(_user=Depends(employee_only), db: Session = Depends(get_db)):
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create(payload: ProjectCreate, user=Depends(employee_only), db: Session = Depends(get_db)):
     return create_project(db, payload, default_responsible_employee_id=user.id)
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+def update(project_id: int, payload: ProjectUpdate, user=Depends(employee_only), db: Session = Depends(get_db)):
+    return update_project(db, project_id, user.id, payload)
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete(project_id: int, user=Depends(employee_only), db: Session = Depends(get_db)):
+    delete_project(db, project_id, user.id)

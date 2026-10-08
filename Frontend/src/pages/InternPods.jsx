@@ -11,6 +11,8 @@ import {
 	updateInternPod,
 } from "../api/internPodApi";
 import { listProjects } from "../api/projectApi";
+import { useAuth } from "../context/AuthContext";
+import { canManageOperations } from "../utils/rolePermissions";
 
 const emptyForm = {
 	pod_name: "",
@@ -77,7 +79,7 @@ function PodForm({ initialValues, projects, submitting, onSubmit, onClose }) {
 	);
 }
 
-function PodRow({ pod, interns, expanded, onToggle, onEdit, onDelete, onMemberAdded, onMemberDeleted }) {
+function PodRow({ pod, interns, expanded, canManage, onToggle, onEdit, onDelete, onMemberAdded, onMemberDeleted }) {
 	const [internUserId, setInternUserId] = useState("");
 	const [memberBusy, setMemberBusy] = useState(false);
 	const [memberError, setMemberError] = useState("");
@@ -107,15 +109,17 @@ function PodRow({ pod, interns, expanded, onToggle, onEdit, onDelete, onMemberAd
 				<span className={`rounded-full px-3 py-1 text-[11px] font-extrabold ${pod.status === "Active" ? "bg-[#e5f8e3] text-[#189b1b]" : "bg-slate-100 text-slate-500"}`}>{pod.status}</span>
 				<div className="hidden w-28 sm:block"><div className="flex justify-between text-[10px] font-bold text-slate-400"><span>Progress</span><span>{pod.progress_percentage}%</span></div><div className="mt-2 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#20b51d]" style={{ width: `${Math.min(100, pod.progress_percentage)}%` }} /></div></div>
 				<button className="icon-button" onClick={() => onToggle(pod.id)} aria-label="Toggle members">{expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button>
-				<button className="icon-button" onClick={() => onEdit(pod)} aria-label="Edit pod"><Pencil size={16} /></button>
-				<button className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-600" onClick={() => onDelete(pod)} aria-label="Delete pod"><Trash2 size={16} /></button>
+				{canManage && <><button className="icon-button" onClick={() => onEdit(pod)} aria-label="Edit pod"><Pencil size={16} /></button>
+				<button className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-600" onClick={() => onDelete(pod)} aria-label="Delete pod"><Trash2 size={16} /></button></>}
 			</div>
-			{expanded && <div className="mt-5 border-t border-slate-100 pt-4"><div className="flex items-center justify-between"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-slate-400">Members ({members.length})</p></div><div className="mt-3 space-y-2">{members.length ? members.map((member) => { const intern = interns.find((item) => item.id === member.intern_user_id); return <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2" key={member.id}><span className="text-sm font-semibold text-slate-700">{intern?.name || `Intern #${member.intern_user_id}`} <span className="ml-2 text-xs text-slate-400">{member.status}</span></span><button className="text-slate-400 hover:text-red-500" onClick={() => removeMember(member.id)} disabled={memberBusy} aria-label="Remove member"><Trash2 size={15} /></button></div>; }) : <p className="text-sm text-slate-400">No members assigned yet.</p>}</div><form className="mt-4 flex flex-wrap gap-2" onSubmit={addMember}><select className="field-input mt-0 min-w-0 flex-1 sm:max-w-xs" value={internUserId} onChange={(event) => setInternUserId(event.target.value)} disabled={!interns.length}><option value="">Select an intern</option>{interns.map((intern) => <option key={intern.id} value={intern.id}>{intern.name}</option>)}</select><button className="secondary-button min-h-11 px-4" disabled={memberBusy || !internUserId}><Plus size={16} /> Add member</button></form>{memberError && <p className="mt-2 text-xs font-semibold text-red-600">{memberError}</p>}</div>}
+			{expanded && <div className="mt-5 border-t border-slate-100 pt-4"><div className="flex items-center justify-between"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-slate-400">Members ({members.length})</p></div><div className="mt-3 space-y-2">{members.length ? members.map((member) => { const intern = interns.find((item) => item.id === member.intern_user_id); return <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2" key={member.id}><span className="text-sm font-semibold text-slate-700">{intern?.name || `Intern #${member.intern_user_id}`} <span className="ml-2 text-xs text-slate-400">{member.status}</span></span>{canManage && <button className="text-slate-400 hover:text-red-500" onClick={() => removeMember(member.id)} disabled={memberBusy} aria-label="Remove member"><Trash2 size={15} /></button>}</div>; }) : <p className="text-sm text-slate-400">No members assigned yet.</p>}</div>{canManage && <form className="mt-4 flex flex-wrap gap-2" onSubmit={addMember}><select className="field-input mt-0 min-w-0 flex-1 sm:max-w-xs" value={internUserId} onChange={(event) => setInternUserId(event.target.value)} disabled={!interns.length}><option value="">Select an intern</option>{interns.map((intern) => <option key={intern.id} value={intern.id}>{intern.name}</option>)}</select><button className="secondary-button min-h-11 px-4" disabled={memberBusy || !internUserId}><Plus size={16} /> Add member</button></form>}{memberError && <p className="mt-2 text-xs font-semibold text-red-600">{memberError}</p>}</div>}
 		</article>
 	);
 }
 
 export default function InternPods() {
+	const { user } = useAuth();
+	const canManage = canManageOperations(user?.role);
 	const [pods, setPods] = useState([]);
 	const [interns, setInterns] = useState([]);
 	const [projects, setProjects] = useState([]);
@@ -159,9 +163,9 @@ export default function InternPods() {
 
 	return (
 		<div className="space-y-7">
-			<section className="subpage-hero"><div className="relative z-10 max-w-xl"><p className="eyebrow text-[#199d1c]">Digital Lab workspace</p><h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-[#10233f]">Intern pods</h2><p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">Organize mentors, interns and feature work in one connected pod.</p><button className="primary-button mt-6" onClick={() => setForm({ ...emptyForm })}><Plus size={17} /> Add intern pod</button></div><div className="subpage-ring" /></section>
-			{form && <PodForm initialValues={form} projects={projects} submitting={saving} onSubmit={savePod} onClose={() => setForm(null)} />}
-			<section className="content-card"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#0871c6]">Live data</p><h3 className="section-title">All intern pods <span className="ml-2 text-sm font-bold text-slate-400">{pods.length}</span></h3></div><button className="icon-button" onClick={loadPods} aria-label="Refresh intern pods"><RefreshCw size={17} /></button></div>{error && <div className="mb-4 flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss error"><X size={16} /></button></div>}{loading ? <div className="flex items-center justify-center gap-2 py-14 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={18} /> Loading intern pods...</div> : pods.length ? <div className="space-y-3">{pods.map((pod) => <PodRow key={pod.id} pod={pod} interns={interns} expanded={expandedId === pod.id} onToggle={(id) => setExpandedId(expandedId === id ? null : id)} onEdit={(item) => setForm({ ...formFromPod(item), id: item.id })} onDelete={removePod} onMemberAdded={loadPods} onMemberDeleted={loadPods} />)}</div> : <div className="py-14 text-center"><Users className="mx-auto text-slate-300" size={36} /><p className="mt-3 text-sm font-extrabold text-slate-600">No intern pods yet</p><p className="mt-1 text-sm text-slate-400">Create the first pod to connect interns with a project.</p></div>}</section>
+			<section className="subpage-hero"><div className="relative z-10 max-w-xl"><p className="eyebrow text-[#199d1c]">Digital Lab workspace</p><h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-[#10233f]">Intern pods</h2><p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">Organize mentors, interns and feature work in one connected pod.</p>{canManage && <button className="primary-button mt-6" onClick={() => setForm({ ...emptyForm })}><Plus size={17} /> Add intern pod</button>}</div><div className="subpage-ring" /></section>
+			{canManage && form && <PodForm initialValues={form} projects={projects} submitting={saving} onSubmit={savePod} onClose={() => setForm(null)} />}
+			<section className="content-card"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#0871c6]">Live data</p><h3 className="section-title">All intern pods <span className="ml-2 text-sm font-bold text-slate-400">{pods.length}</span></h3></div><button className="icon-button" onClick={loadPods} aria-label="Refresh intern pods"><RefreshCw size={17} /></button></div>{error && <div className="mb-4 flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss error"><X size={16} /></button></div>}{loading ? <div className="flex items-center justify-center gap-2 py-14 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={18} /> Loading intern pods...</div> : pods.length ? <div className="space-y-3">{pods.map((pod) => <PodRow key={pod.id} pod={pod} interns={interns} expanded={expandedId === pod.id} canManage={canManage} onToggle={(id) => setExpandedId(expandedId === id ? null : id)} onEdit={(item) => setForm({ ...formFromPod(item), id: item.id })} onDelete={removePod} onMemberAdded={loadPods} onMemberDeleted={loadPods} />)}</div> : <div className="py-14 text-center"><Users className="mx-auto text-slate-300" size={36} /><p className="mt-3 text-sm font-extrabold text-slate-600">No intern pods yet</p><p className="mt-1 text-sm text-slate-400">Create the first pod to connect interns with a project.</p></div>}</section>
 		</div>
 	);
 }

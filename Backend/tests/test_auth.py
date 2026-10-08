@@ -341,3 +341,89 @@ def test_create_endpoints_reject_invalid_relationships():
         "task_title": "Invalid project",
         "project_id": 999999,
     }).status_code == 400
+
+
+def test_employee_can_update_and_delete_an_owned_project_and_management_cannot_mutate_projects():
+    seed_rbac_workspace()
+    assert login("employee", "employee@example.com").status_code == 200
+
+    created = client.post("/api/projects", json={
+        "project_name": "Editable Project",
+        "project_category": "Platform",
+        "current_status": "Planning",
+        "progress_percentage": 5,
+    })
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    updated = client.patch(f"/api/projects/{project_id}", json={
+        "project_name": "Updated Project",
+        "project_category": "Operations",
+        "project_description": "Updated and persisted",
+        "current_status": "Active",
+        "progress_percentage": 60,
+        "target_date": "2031-03-20",
+    })
+    assert updated.status_code == 200
+    assert updated.json()["project_name"] == "Updated Project"
+    assert updated.json()["progress_percentage"] == "60.00"
+    persisted = next(item for item in client.get("/api/projects").json() if item["id"] == project_id)
+    assert persisted["project_description"] == "Updated and persisted"
+
+    assert login("management", "management@example.com").status_code == 200
+    assert client.post("/api/projects", json={"project_name": "Forbidden"}).status_code == 403
+    assert client.patch(f"/api/projects/{project_id}", json={"project_name": "Forbidden"}).status_code == 403
+    assert client.delete(f"/api/projects/{project_id}").status_code == 403
+
+    assert login("employee", "employee@example.com").status_code == 200
+    deleted = client.delete(f"/api/projects/{project_id}")
+    assert deleted.status_code == 204
+    assert all(item["id"] != project_id for item in client.get("/api/projects").json())
+
+
+def test_project_deletion_is_blocked_when_related_records_would_be_lost():
+    seed_rbac_workspace()
+    assert login("employee", "employee@example.com").status_code == 200
+    owned_project = next(item for item in client.get("/api/projects").json() if item["project_name"] == "Pod One Project")
+
+    response = client.delete(f"/api/projects/{owned_project['id']}")
+
+    assert response.status_code == 409
+    assert "task(s)" in response.json()["detail"]
+    assert any(item["id"] == owned_project["id"] for item in client.get("/api/projects").json())
+
+
+def test_management_has_read_only_access_to_pods_meetings_and_rooms():
+    seed_rbac_workspace()
+    assert login("management", "management@example.com").status_code == 200
+
+    pods = client.get("/api/intern-pods")
+    assert pods.status_code == 200
+    assert client.get("/api/intern-pods/mentors").status_code == 200
+    interns = client.get("/api/intern-pods/interns")
+    assert interns.status_code == 200
+    assert client.get("/api/meetings").status_code == 200
+    assert client.get("/api/meetings/options").status_code == 200
+    assert client.get("/api/meeting-rooms").status_code == 200
+    assert client.get("/api/meeting-rooms/calendar").status_code == 200
+
+    pod_id = pods.json()[0]["id"]
+    intern_id = interns.json()[0]["id"]
+    meeting_payload = {
+        "meeting_title": "Forbidden meeting",
+        "start_datetime": "2032-01-10T09:00:00",
+        "end_datetime": "2032-01-10T10:00:00",
+    }
+    room_payload = {"room_name": "Forbidden room"}
+
+    assert client.post("/api/intern-pods", json={"pod_name": "Forbidden pod"}).status_code == 403
+    assert client.put(f"/api/intern-pods/{pod_id}", json={"pod_name": "Forbidden pod"}).status_code == 403
+    assert client.delete(f"/api/intern-pods/{pod_id}").status_code == 403
+    assert client.post(f"/api/intern-pods/{pod_id}/members", json={"intern_user_id": intern_id}).status_code == 403
+    assert client.delete(f"/api/intern-pods/{pod_id}/members/1").status_code == 403
+    assert client.post("/api/meetings", json=meeting_payload).status_code == 403
+    assert client.put("/api/meetings/1", json=meeting_payload).status_code == 403
+    assert client.delete("/api/meetings/1").status_code == 403
+    assert client.post("/api/meeting-rooms", json=room_payload).status_code == 403
+    assert client.put("/api/meeting-rooms/1", json=room_payload).status_code == 403
+    assert client.delete("/api/meeting-rooms/1").status_code == 403

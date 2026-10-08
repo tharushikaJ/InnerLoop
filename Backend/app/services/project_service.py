@@ -1,12 +1,12 @@
 from fastapi import HTTPException, status
-from sqlalchemy import false, or_
+from sqlalchemy import false, inspect, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models.intern_pod import InternPod, InternPodMember
 from ..models.project import Project
 from ..models.user import User
-from ..schemas.project_schema import ProjectCreate
+from ..schemas.project_schema import ProjectCreate, ProjectUpdate
 
 
 def intern_pod_ids(db: Session, user_id: int) -> list[int]:
@@ -114,3 +114,118 @@ def create_project(
         ) from error
     db.refresh(project)
     return project_data(db, project)
+
+
+def _validate_project_relationships(db: Session, values: dict) -> None:
+    if "responsible_employee_id" in values and values["responsible_employee_id"] is not None:
+        employee_exists = db.query(User.id).filter(
+            User.id == values["responsible_employee_id"],
+            User.role == "employee",
+            User.status == "active",
+        ).first()
+        if not employee_exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The selected responsible employee is not active or does not exist.",
+            )
+    if "assigned_intern_pod_id" in values and values["assigned_intern_pod_id"] is not None:
+        pod_exists = db.query(InternPod.id).filter(
+            InternPod.id == values["assigned_intern_pod_id"]
+        ).first()
+        if not pod_exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The selected intern pod does not exist.",
+            )
+
+
+def _employee_project(db: Session, project_id: int, employee_id: int) -> Project:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+    if project.responsible_employee_id != employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only modify projects assigned to you.",
+        )
+    return project
+
+
+def update_project(
+    db: Session,
+    project_id: int,
+    employee_id: int,
+    payload: ProjectUpdate,
+) -> dict:
+    project = _employee_project(db, project_id, employee_id)
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide at least one project field to update.",
+        )
+    if "project_name" in values and values["project_name"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Project name cannot be null.",
+        )
+    _validate_project_relationships(db, values)
+    for field, value in values.items():
+        setattr(project, field, value)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected responsible employee or intern pod does not exist.",
+        ) from error
+    db.refresh(project)
+    return project_data(db, project)
+
+
+def _project_dependency_counts(db: Session, project_id: int) -> dict[str, int]:
+    dependency_columns = {
+        "tasks": "project_id",
+        "project_updates": "project_id",
+        "intern_pods": "assigned_project_id",
+        "meeting_projects": "project_id",
+        "documents": "project_id",
+    }
+    inspector = inspect(db.get_bind())
+    existing_tables = set(inspector.get_table_names())
+    counts = {}
+    for table_name, column_name in dependency_columns.items():
+        if table_name in existing_tables:
+            counts[table_name] = db.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE {column_name} = :project_id"),
+                {"project_id": project_id},
+            ).scalar_one()
+    return {name: count for name, count in counts.items() if count}
+
+
+def delete_project(db: Session, project_id: int, employee_id: int) -> None:
+    project = _employee_project(db, project_id, employee_id)
+    dependencies = _project_dependency_counts(db, project_id)
+    if dependencies:
+        labels = {
+            "tasks": "task(s)",
+            "project_updates": "project update(s)",
+            "intern_pods": "intern pod assignment(s)",
+            "meeting_projects": "meeting link(s)",
+            "documents": "document(s)",
+        }
+        summary = ", ".join(f"{count} {labels[name]}" for name, count in dependencies.items())
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This project cannot be deleted while it has related records: {summary}. Remove or reassign them first.",
+        )
+    db.delete(project)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This project cannot be deleted while related records still exist.",
+        ) from error
