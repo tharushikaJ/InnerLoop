@@ -7,7 +7,9 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.models.intern_pod import InternPod, InternPodMember
+from app.models.meeting import Meeting
 from app.models.project import Project
+from app.models.room import MeetingRoom
 from app.models.task import Task
 from app.models.user import User
 
@@ -247,6 +249,48 @@ def test_management_can_use_every_rbac_route():
     assert metrics["active_projects"] == 2
     assert metrics["blocked_projects"] == 1
     assert metrics["delayed_projects"] == 0
+
+
+def test_meetings_support_scheduling_room_conflicts_and_owner_permissions():
+    seed_rbac_workspace()
+    with TestingSession() as db:
+        room = MeetingRoom(room_name="Blue Room", status="Available")
+        db.add(room)
+        db.commit()
+        db.refresh(room)
+        room_id = room.id
+
+    assert login("employee", "employee@example.com").status_code == 200
+    meeting = client.post("/api/meetings", json={
+        "meeting_title": "Weekly delivery sync",
+        "meeting_type": "Team sync",
+        "start_datetime": "2026-10-08T10:00:00",
+        "end_datetime": "2026-10-08T11:00:00",
+        "meeting_room_id": room_id,
+        "attendee_user_ids": [],
+        "project_ids": [],
+    })
+    assert meeting.status_code == 201
+    meeting_id = meeting.json()["id"]
+    assert len(client.get("/api/meetings").json()) == 1
+
+    conflict = client.post("/api/meetings", json={
+        "meeting_title": "Conflicting sync",
+        "start_datetime": "2026-10-08T10:30:00",
+        "end_datetime": "2026-10-08T11:30:00",
+        "meeting_room_id": room_id,
+    })
+    assert conflict.status_code == 409
+
+    assert client.put(f"/api/meetings/{meeting_id}", json={
+        "meeting_title": "Updated delivery sync",
+        "start_datetime": "2026-10-08T10:00:00",
+        "end_datetime": "2026-10-08T11:00:00",
+        "meeting_room_id": room_id,
+    }).status_code == 200
+
+    assert login("management", "management@example.com").status_code == 200
+    assert client.delete(f"/api/meetings/{meeting_id}").status_code == 204
 
 
 def test_employee_can_create_projects_and_tasks_that_persist_with_existing_visibility_rules():
