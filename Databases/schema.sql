@@ -7,7 +7,10 @@
 -- ============================================================
 -- 1. USERS
 -- ============================================================
-
+ALTER TABLE users
+ADD COLUMN assigned_supervisor_id BIGINT
+REFERENCES users(id)
+ON DELETE SET NULL;
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,

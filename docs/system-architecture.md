@@ -86,11 +86,11 @@ sequenceDiagram
     participant S as Auth service
     participant D as PostgreSQL
 
-    B->>N: POST /api/auth/login {role, email, password}
+    B->>N: POST /api/auth/login {email, password}
     N->>A: Forward request
     A->>S: Authenticate credentials
     S->>D: Find user by email
-    S->>S: Check role, active status, bcrypt password
+    S->>S: Check active status and bcrypt password
     S-->>A: Authenticated user
     A-->>B: HttpOnly JWT cookie + user response
     B->>N: Request protected API with cookie

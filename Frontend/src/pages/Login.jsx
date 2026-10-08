@@ -9,7 +9,7 @@ export default function Login() {
   const { isAuthenticated, loading: authLoading, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [form, setForm] = useState({ role: "intern", email: "", password: "" });
+  const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +29,7 @@ export default function Login() {
       await login({ ...form, email: form.email.trim().toLowerCase() });
       navigate(location.state?.from?.pathname || "/dashboard", { replace: true });
     } catch (requestError) {
-      setError(requestError.message || "Invalid email, password, or role.");
+      setError(requestError.message || "Invalid email or password.");
     } finally {
       setSubmitting(false);
     }
@@ -49,7 +49,6 @@ export default function Login() {
         {location.state?.message && <div className="auth-success" role="status">{location.state.message}</div>}
         {error && <div className="auth-error" role="alert">{error}</div>}
         <form className="mt-6 space-y-4" onSubmit={submit} noValidate>
-          <label className="field-label">Role<select name="role" value={form.role} onChange={update} className="field-input" required><option value="intern">Intern</option><option value="employee">Employee</option><option value="management">Management</option></select></label>
           <label className="field-label">Email<input name="email" type="email" autoComplete="email" value={form.email} onChange={update} className="field-input" placeholder="name@example.com" required /></label>
           <label className="field-label">Password<span className="relative block"><input name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={form.password} onChange={update} className="field-input pr-12" placeholder="Enter your password" required /><button type="button" onClick={() => setShowPassword((value) => !value)} className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>
           <button type="submit" disabled={submitting || authLoading} className="primary-button w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">{submitting ? <><LoaderCircle size={18} className="animate-spin" /> Signing in…</> : <>Login <ArrowRight size={17} /></>}</button>
