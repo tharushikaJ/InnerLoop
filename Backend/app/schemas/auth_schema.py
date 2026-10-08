@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .user_schema import UserResponse, UserRole
 
@@ -10,6 +10,7 @@ class RegisterRequest(BaseModel):
     role: UserRole
     designation: str | None = Field(default=None, max_length=150)
     department: str | None = Field(default=None, max_length=150)
+    assigned_supervisor_id: int | None = None
 
     @field_validator("name", "designation", "department", mode="before")
     @classmethod
@@ -31,6 +32,8 @@ class RegisterRequest(BaseModel):
     @model_validator(mode="after")
     def validate_role_fields(self):
         if self.role in {"employee", "management"}:
+            if self.assigned_supervisor_id is not None:
+                raise ValueError("Only interns can have an assigned supervisor.")
             if not self.designation:
                 raise ValueError("Designation is required for employees and management.")
             if not self.department:
@@ -42,9 +45,10 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    role: UserRole
     email: EmailStr
     password: str = Field(min_length=1, max_length=72)
+
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("email", mode="after")
     @classmethod

@@ -24,13 +24,13 @@ def list_mentors(_user=Depends(employee_or_management), db: Session = Depends(ge
 
 
 @router.get("/interns", response_model=list[UserResponse])
-def list_interns(_user=Depends(employee_or_management), db: Session = Depends(get_db)):
-    return intern_pod_service.list_interns(db)
+def list_interns(user=Depends(employee_or_management), db: Session = Depends(get_db)):
+    return intern_pod_service.list_interns(db, user)
 
 
 @router.post("", response_model=InternPodResponse, status_code=status.HTTP_201_CREATED)
-def create_intern_pod(payload: InternPodCreate, _user=Depends(employee_only), db: Session = Depends(get_db)):
-    return intern_pod_service.create_intern_pod(db, payload)
+def create_intern_pod(payload: InternPodCreate, user=Depends(employee_only), db: Session = Depends(get_db)):
+    return intern_pod_service.create_intern_pod(db, payload, user.id)
 
 
 @router.put("/{pod_id}", response_model=InternPodResponse)
@@ -44,8 +44,8 @@ def delete_intern_pod(pod_id: int, _user=Depends(employee_only), db: Session = D
 
 
 @router.post("/{pod_id}/members", response_model=InternPodMemberResponse, status_code=status.HTTP_201_CREATED)
-def add_member(pod_id: int, payload: InternPodMemberCreate, _user=Depends(employee_only), db: Session = Depends(get_db)):
-    return intern_pod_service.add_member(db, pod_id, payload)
+def add_member(pod_id: int, payload: InternPodMemberCreate, user=Depends(employee_only), db: Session = Depends(get_db)):
+    return intern_pod_service.add_member(db, pod_id, payload, user.id)
 
 
 @router.delete("/{pod_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)

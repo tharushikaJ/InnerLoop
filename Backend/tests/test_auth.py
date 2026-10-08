@@ -46,10 +46,9 @@ def register(payload):
     return client.post("/api/auth/register", json=payload)
 
 
-def login(role, email):
+def login(email):
     client.cookies.clear()
     return client.post("/api/auth/login", json={
-        "role": role,
         "email": email,
         "password": "Password123",
     })
@@ -77,6 +76,7 @@ def test_registers_all_supported_roles_without_exposing_password_hash():
     })
     assert employee.status_code == 201
     assert employee.json()["user"]["designation"] == "Software Engineer"
+    assert employee.json()["user"]["assigned_supervisor_id"] is None
 
     management = register({
         "name": "Manoj Manager",
@@ -88,6 +88,7 @@ def test_registers_all_supported_roles_without_exposing_password_hash():
     })
     assert management.status_code == 201
     assert management.json()["user"]["role"] == "management"
+    assert management.json()["user"]["assigned_supervisor_id"] is None
 
 
 def test_registration_validation_and_duplicate_email():
@@ -120,22 +121,27 @@ def test_login_me_logout_and_generic_login_failures():
     })
 
     for credentials in (
-        {"role": "intern", "email": "intern@example.com", "password": "wrong-password"},
-        {"role": "employee", "email": "intern@example.com", "password": "Password123"},
-        {"role": "intern", "email": "missing@example.com", "password": "Password123"},
+        {"email": "intern@example.com", "password": "wrong-password"},
+        {"email": "missing@example.com", "password": "Password123"},
     ):
         response = client.post("/api/auth/login", json=credentials)
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid email, password, or role."
+        assert response.json()["detail"] == "Invalid email or password."
 
     login = client.post("/api/auth/login", json={
-        "role": "intern",
         "email": "intern@example.com",
         "password": "Password123",
     })
     assert login.status_code == 200
     assert "innerloop_access_token" in login.cookies
     assert "password_hash" not in login.json()["user"]
+    assert login.json()["user"]["role"] == "intern"
+
+    assert client.post("/api/auth/login", json={
+        "email": "intern@example.com",
+        "password": "Password123",
+        "role": "intern",
+    }).status_code == 422
 
     me = client.get("/api/auth/me")
     assert me.status_code == 200
@@ -158,12 +164,11 @@ def test_inactive_user_cannot_login():
         db.commit()
 
     response = client.post("/api/auth/login", json={
-        "role": "intern",
         "email": "inactive@example.com",
         "password": "Password123",
     })
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email, password, or role."
+    assert response.json()["detail"] == "Invalid email or password."
 
 
 def seed_rbac_workspace():
@@ -207,7 +212,7 @@ def seed_rbac_workspace():
 
 def test_intern_data_is_sql_scoped_and_privileged_routes_are_forbidden():
     seed_rbac_workspace()
-    assert login("intern", "intern@example.com").status_code == 200
+    assert login("intern@example.com").status_code == 200
 
     projects = client.get("/api/projects")
     assert projects.status_code == 200
@@ -239,7 +244,7 @@ def test_intern_can_view_and_submit_tasks_from_projects_assigned_through_their_p
         reverse_task_id = reverse_task.id
         other_task_id = other_task.id
 
-    assert login("intern", "intern@example.com").status_code == 200
+    assert login("intern@example.com").status_code == 200
     visible_projects = {item["project_name"] for item in client.get("/api/projects").json()}
     visible_tasks = {item["task_title"] for item in client.get("/api/tasks").json()}
 
@@ -288,7 +293,7 @@ def test_intern_can_view_and_submit_tasks_from_projects_assigned_through_their_p
 
 def test_employee_can_use_operational_routes_but_not_administration():
     seed_rbac_workspace()
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
 
     for path in ("/api/dashboard", "/api/projects", "/api/tasks", "/api/meetings", "/api/intern-pods", "/api/meeting-rooms", "/api/reports/summary"):
         assert client.get(path).status_code == 200
@@ -300,7 +305,7 @@ def test_employee_can_use_operational_routes_but_not_administration():
 
 def test_management_can_use_every_rbac_route():
     seed_rbac_workspace()
-    assert login("management", "management@example.com").status_code == 200
+    assert login("management@example.com").status_code == 200
 
     for path in ("/api/dashboard", "/api/projects", "/api/tasks", "/api/meetings", "/api/intern-pods", "/api/meeting-rooms", "/api/reports/summary", "/api/users", "/api/settings", "/api/audit-logs"):
         assert client.get(path).status_code == 200
@@ -319,7 +324,7 @@ def test_meetings_support_scheduling_room_conflicts_and_owner_permissions():
         db.refresh(room)
         room_id = room.id
 
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
     meeting = client.post("/api/meetings", json={
         "meeting_title": "Weekly delivery sync",
         "meeting_type": "Team sync",
@@ -348,13 +353,13 @@ def test_meetings_support_scheduling_room_conflicts_and_owner_permissions():
         "meeting_room_id": room_id,
     }).status_code == 200
 
-    assert login("management", "management@example.com").status_code == 200
+    assert login("management@example.com").status_code == 200
     assert client.delete(f"/api/meetings/{meeting_id}").status_code == 204
 
 
 def test_employee_can_create_projects_and_tasks_that_persist_with_existing_visibility_rules():
     seed_rbac_workspace()
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
 
     project_options = client.get("/api/projects/options")
     assert project_options.status_code == 200
@@ -415,7 +420,7 @@ def test_employee_can_create_projects_and_tasks_that_persist_with_existing_visib
     assert persisted_task["project_name"] == "Persistent Delivery Project"
     assert persisted_task["assigned_user_name"] == "Esha Employee"
 
-    assert login("management", "management@example.com").status_code == 200
+    assert login("management@example.com").status_code == 200
     assert "Persistent Delivery Project" in {item["project_name"] for item in client.get("/api/projects").json()}
     assert "Persistent Delivery Task" in {item["task_title"] for item in client.get("/api/tasks").json()}
     management_dashboard = client.get("/api/dashboard").json()
@@ -428,14 +433,14 @@ def test_employee_can_create_projects_and_tasks_that_persist_with_existing_visib
     assert client.patch(f"/api/tasks/{task.json()['id']}", json={"status": "Completed"}).status_code == 403
     assert client.patch(f"/api/tasks/{task.json()['id']}/submission", json={"progress_note": "Forbidden"}).status_code == 403
 
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
     assert "Persistent Delivery Project" in {item["project_name"] for item in client.get("/api/projects").json()}
     assert "Persistent Delivery Task" in {item["task_title"] for item in client.get("/api/tasks").json()}
 
 
 def test_create_endpoints_reject_invalid_relationships():
     seed_rbac_workspace()
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
     assert client.post("/api/projects", json={
         "project_name": "Invalid owner",
         "responsible_employee_id": 999999,
@@ -448,7 +453,7 @@ def test_create_endpoints_reject_invalid_relationships():
 
 def test_employee_can_update_and_delete_an_owned_project_and_management_cannot_mutate_projects():
     seed_rbac_workspace()
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
 
     created = client.post("/api/projects", json={
         "project_name": "Editable Project",
@@ -473,12 +478,12 @@ def test_employee_can_update_and_delete_an_owned_project_and_management_cannot_m
     persisted = next(item for item in client.get("/api/projects").json() if item["id"] == project_id)
     assert persisted["project_description"] == "Updated and persisted"
 
-    assert login("management", "management@example.com").status_code == 200
+    assert login("management@example.com").status_code == 200
     assert client.post("/api/projects", json={"project_name": "Forbidden"}).status_code == 403
     assert client.patch(f"/api/projects/{project_id}", json={"project_name": "Forbidden"}).status_code == 403
     assert client.delete(f"/api/projects/{project_id}").status_code == 403
 
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
     deleted = client.delete(f"/api/projects/{project_id}")
     assert deleted.status_code == 204
     assert all(item["id"] != project_id for item in client.get("/api/projects").json())
@@ -486,7 +491,7 @@ def test_employee_can_update_and_delete_an_owned_project_and_management_cannot_m
 
 def test_project_deletion_is_blocked_when_related_records_would_be_lost():
     seed_rbac_workspace()
-    assert login("employee", "employee@example.com").status_code == 200
+    assert login("employee@example.com").status_code == 200
     owned_project = next(item for item in client.get("/api/projects").json() if item["project_name"] == "Pod One Project")
 
     response = client.delete(f"/api/projects/{owned_project['id']}")
@@ -498,7 +503,7 @@ def test_project_deletion_is_blocked_when_related_records_would_be_lost():
 
 def test_management_has_read_only_access_to_pods_meetings_and_rooms():
     seed_rbac_workspace()
-    assert login("management", "management@example.com").status_code == 200
+    assert login("management@example.com").status_code == 200
 
     pods = client.get("/api/intern-pods")
     assert pods.status_code == 200
@@ -530,3 +535,182 @@ def test_management_has_read_only_access_to_pods_meetings_and_rooms():
     assert client.post("/api/meeting-rooms", json=room_payload).status_code == 403
     assert client.put("/api/meeting-rooms/1", json=room_payload).status_code == 403
     assert client.delete("/api/meeting-rooms/1").status_code == 403
+
+
+def test_intern_supervisor_registration_rules_and_response_details():
+    employee = register({
+        "name": "Active Supervisor",
+        "email": "supervisor@example.com",
+        "password": "Password123",
+        "role": "employee",
+        "designation": "Engineer",
+        "department": "Digital Lab",
+    })
+    assert employee.status_code == 201
+    supervisor_id = employee.json()["user"]["id"]
+
+    options = client.get("/api/auth/supervisors")
+    assert options.status_code == 200
+    assert options.json() == [{"id": supervisor_id, "name": "Active Supervisor"}]
+
+    assigned = register({
+        "name": "Assigned Intern",
+        "email": "assigned@example.com",
+        "password": "Password123",
+        "role": "intern",
+        "assigned_supervisor_id": supervisor_id,
+    })
+    assert assigned.status_code == 201
+    assert assigned.json()["user"]["assigned_supervisor_id"] == supervisor_id
+    assert assigned.json()["user"]["assigned_supervisor_name"] == "Active Supervisor"
+
+    unassigned = register({
+        "name": "Unassigned Intern",
+        "email": "unassigned@example.com",
+        "password": "Password123",
+        "role": "intern",
+        "assigned_supervisor_id": None,
+    })
+    assert unassigned.status_code == 201
+    assert unassigned.json()["user"]["assigned_supervisor_id"] is None
+
+    with TestingSession() as db:
+        assert db.query(User).filter(User.email == "unassigned@example.com").one().assigned_supervisor_id is None
+        assert db.query(User).filter(User.email == "supervisor@example.com").one().assigned_supervisor_id is None
+
+
+def test_registration_rejects_non_employee_invalid_and_non_intern_supervisors():
+    intern = register({"name": "Other Intern", "email": "other@example.com", "password": "Password123", "role": "intern"})
+    manager = register({
+        "name": "Manager", "email": "manager@example.com", "password": "Password123", "role": "management",
+        "designation": "Manager", "department": "Digital Lab",
+    })
+    assert intern.status_code == 201
+    assert manager.status_code == 201
+
+    for index, supervisor_id in enumerate((intern.json()["user"]["id"], manager.json()["user"]["id"], 999999)):
+        response = register({
+            "name": f"Invalid Assignment {index}",
+            "email": f"invalid-assignment-{index}@example.com",
+            "password": "Password123",
+            "role": "intern",
+            "assigned_supervisor_id": supervisor_id,
+        })
+        assert response.status_code == 400
+
+    non_intern = register({
+        "name": "Invalid Employee", "email": "invalid-employee@example.com", "password": "Password123",
+        "role": "employee", "designation": "Engineer", "department": "Digital Lab",
+        "assigned_supervisor_id": intern.json()["user"]["id"],
+    })
+    assert non_intern.status_code == 422
+
+
+def test_management_updates_supervisors_and_role_change_clears_assignments():
+    supervisor = register({
+        "name": "Supervisor", "email": "supervisor@example.com", "password": "Password123", "role": "employee",
+        "designation": "Engineer", "department": "Digital Lab",
+    }).json()["user"]
+    intern = register({"name": "Intern", "email": "intern@example.com", "password": "Password123", "role": "intern"}).json()["user"]
+    register({
+        "name": "Manager", "email": "manager@example.com", "password": "Password123", "role": "management",
+        "designation": "Manager", "department": "Digital Lab",
+    })
+    assert login("manager@example.com").status_code == 200
+
+    assigned = client.patch(f"/api/users/{intern['id']}", json={"assigned_supervisor_id": supervisor["id"]})
+    assert assigned.status_code == 200
+    assert assigned.json()["assigned_supervisor_name"] == "Supervisor"
+    assert client.patch(f"/api/users/{intern['id']}", json={"assigned_supervisor_id": intern["id"]}).status_code == 400
+
+    role_change = client.patch(f"/api/users/{supervisor['id']}", json={"role": "management"})
+    assert role_change.status_code == 200
+    users = client.get("/api/users").json()
+    updated_intern = next(user for user in users if user["id"] == intern["id"])
+    assert updated_intern["assigned_supervisor_id"] is None
+    assert updated_intern["assigned_supervisor_name"] is None
+
+
+def test_employee_pod_member_options_are_limited_to_assigned_interns():
+    seed_rbac_workspace()
+    with TestingSession() as db:
+        supervisor_id = db.query(User).filter(User.email == "employee@example.com").one().id
+        unassigned_intern_id = db.query(User).filter(User.email == "intern@example.com").one().id
+
+    other_supervisor = register({
+        "name": "Other Supervisor",
+        "email": "other-supervisor@example.com",
+        "password": "Password123",
+        "role": "employee",
+        "designation": "Engineer",
+        "department": "Digital Lab",
+    }).json()["user"]
+    assigned_intern = register({
+        "name": "Assigned Pod Intern",
+        "email": "assigned-pod-intern@example.com",
+        "password": "Password123",
+        "role": "intern",
+        "assigned_supervisor_id": supervisor_id,
+    }).json()["user"]
+    other_intern = register({
+        "name": "Other Supervisor Intern",
+        "email": "other-supervisor-intern@example.com",
+        "password": "Password123",
+        "role": "intern",
+        "assigned_supervisor_id": other_supervisor["id"],
+    }).json()["user"]
+
+    assert login("employee@example.com").status_code == 200
+    options = client.get("/api/intern-pods/interns")
+    assert options.status_code == 200
+    assert [(intern["id"], intern["name"]) for intern in options.json()] == [
+        (assigned_intern["id"], "Assigned Pod Intern")
+    ]
+
+    pod_id = client.get("/api/intern-pods").json()[0]["id"]
+    assert client.post(
+        f"/api/intern-pods/{pod_id}/members",
+        json={"intern_user_id": assigned_intern["id"]},
+    ).status_code == 201
+    assert client.post(
+        f"/api/intern-pods/{pod_id}/members",
+        json={"intern_user_id": other_intern["id"]},
+    ).status_code == 403
+    assert client.post(
+        f"/api/intern-pods/{pod_id}/members",
+        json={"intern_user_id": unassigned_intern_id},
+    ).status_code == 403
+
+    assert login("management@example.com").status_code == 200
+    management_intern_ids = {intern["id"] for intern in client.get("/api/intern-pods/interns").json()}
+    assert assigned_intern["id"] in management_intern_ids
+    assert other_intern["id"] in management_intern_ids
+    assert unassigned_intern_id in management_intern_ids
+
+
+def test_pod_mentor_is_authenticated_employee_and_cannot_be_edited():
+    seed_rbac_workspace()
+    with TestingSession() as db:
+        employee_id = db.query(User).filter(User.email == "employee@example.com").one().id
+        other_user_id = db.query(User).filter(User.email == "management@example.com").one().id
+
+    assert login("employee@example.com").status_code == 200
+    created = client.post("/api/intern-pods", json={
+        "pod_name": "Authenticated Mentor Pod",
+        "assigned_feature_module": "Supervisor assignment",
+        "mentor_employee_id": other_user_id,
+    })
+    assert created.status_code == 201
+    assert created.json()["mentor_employee_id"] == employee_id
+    assert created.json()["status"] == "Active"
+    assert created.json()["start_date"] is None
+    assert created.json()["target_date"] is None
+    assert created.json()["progress_percentage"] == "0.00"
+
+    updated = client.put(f"/api/intern-pods/{created.json()['id']}", json={
+        "pod_name": "Renamed Mentor Pod",
+        "mentor_employee_id": other_user_id,
+    })
+    assert updated.status_code == 200
+    assert updated.json()["pod_name"] == "Renamed Mentor Pod"
+    assert updated.json()["mentor_employee_id"] == employee_id
