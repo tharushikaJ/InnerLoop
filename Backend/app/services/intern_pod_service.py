@@ -22,12 +22,24 @@ def list_mentors(db: Session) -> list[User]:
     return db.query(User).filter(User.role == "employee").order_by(User.name.asc()).all()
 
 
-def list_interns(db: Session) -> list[User]:
-    return db.query(User).filter(User.role == "intern").order_by(User.name.asc()).all()
+def list_interns(db: Session, user: User) -> list[User]:
+    query = db.query(User).filter(User.role == "intern")
+    if user.role == "employee":
+        query = query.filter(
+            User.assigned_supervisor_id == user.id,
+            User.status == "active",
+        )
+    return query.order_by(User.name.asc()).all()
 
 
-def create_intern_pod(db: Session, payload: InternPodCreate) -> InternPod:
-    pod = InternPod(**payload.model_dump())
+def create_intern_pod(
+    db: Session,
+    payload: InternPodCreate,
+    mentor_employee_id: int,
+) -> InternPod:
+    values = payload.model_dump()
+    values["mentor_employee_id"] = mentor_employee_id
+    pod = InternPod(**values)
     db.add(pod)
     try:
         db.commit()
@@ -40,7 +52,9 @@ def create_intern_pod(db: Session, payload: InternPodCreate) -> InternPod:
 
 def update_intern_pod(db: Session, pod_id: int, payload: InternPodUpdate) -> InternPod:
     pod = get_intern_pod(db, pod_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    values.pop("mentor_employee_id", None)
+    for field, value in values.items():
         setattr(pod, field, value)
     db.commit()
     db.refresh(pod)
@@ -52,8 +66,29 @@ def delete_intern_pod(db: Session, pod_id: int) -> None:
     db.commit()
 
 
-def add_member(db: Session, pod_id: int, payload: InternPodMemberCreate) -> InternPodMember:
+def add_member(
+    db: Session,
+    pod_id: int,
+    payload: InternPodMemberCreate,
+    supervisor_id: int,
+) -> InternPodMember:
     get_intern_pod(db, pod_id)
+    intern = db.query(User).filter(
+        User.id == payload.intern_user_id,
+        User.role == "intern",
+        User.status == "active",
+    ).first()
+    if not intern:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected intern is not active or does not exist.",
+        )
+    if intern.assigned_supervisor_id != supervisor_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only add interns assigned to you.",
+        )
+
     member = InternPodMember(pod_id=pod_id, **payload.model_dump())
     db.add(member)
     try:

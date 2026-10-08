@@ -21,6 +21,7 @@ import Tasks from "./pages/Tasks";
 import Meetings from "./pages/Meetings";
 import Calendar from "./pages/Calendar";
 import MeetingRoom from "./pages/MeetingRoom";
+import UsersPage from "./pages/Users";
 
 const commonItems = {
   overview: { label: "Overview", path: "/dashboard", icon: LayoutDashboard },
@@ -168,7 +169,7 @@ export default function App() {
           <Route path="/meeting-room/*" element={<WrappedPage><MeetingRoom /></WrappedPage>} />
         </Route>
         <Route element={<RoleProtectedRoute allowedRoles={["management"]} />}>
-          <Route path="/users/*" element={<WrappedPage><ApiPage name="Users" load={workspaceApi.users} /></WrappedPage>} />
+          <Route path="/users/*" element={<WrappedPage><UsersPage /></WrappedPage>} />
           <Route path="/audit-logs/*" element={<WrappedPage><ApiPage name="Audit Logs" load={workspaceApi.auditLogs} /></WrappedPage>} />
           <Route path="/settings/*" element={<WrappedPage><ApiPage name="Settings" load={workspaceApi.settings} /></WrappedPage>} />
         </Route>

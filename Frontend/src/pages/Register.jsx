@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { ArrowRight, Eye, EyeOff, LoaderCircle, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Eye, EyeOff, LoaderCircle, RefreshCw, UserPlus } from "lucide-react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
+import { authApi } from "../api/authApi";
 import Brand from "../components/Brand";
 import { useAuth } from "../context/AuthContext";
 
-const initialForm = { role: "intern", name: "", email: "", password: "", confirmPassword: "", designation: "", department: "" };
+const initialForm = { role: "intern", name: "", email: "", password: "", confirmPassword: "", designation: "", department: "", assigned_supervisor_id: "" };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validate(form) {
@@ -34,12 +35,32 @@ export default function Register() {
   const [apiError, setApiError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
+  const [supervisors, setSupervisors] = useState([]);
+  const [supervisorsLoading, setSupervisorsLoading] = useState(true);
+  const [supervisorsError, setSupervisorsError] = useState("");
+  const [supervisorReload, setSupervisorReload] = useState(0);
+
+  useEffect(() => {
+    if (form.role !== "intern") return undefined;
+    let active = true;
+    setSupervisorsLoading(true);
+    setSupervisorsError("");
+    authApi.supervisors()
+      .then((items) => { if (active) setSupervisors(items); })
+      .catch((error) => { if (active) { setSupervisors([]); setSupervisorsError(error.message || "Unable to load supervisors."); } })
+      .finally(() => { if (active) setSupervisorsLoading(false); });
+    return () => { active = false; };
+  }, [form.role, supervisorReload]);
 
   if (!authLoading && isAuthenticated) return <Navigate to="/dashboard" replace />;
 
   const update = (event) => {
     const { name, value } = event.target;
-    setForm((current) => name === "role" && value === "intern" ? { ...current, role: value, designation: "", department: "" } : { ...current, [name]: value });
+    setForm((current) => {
+      if (name !== "role") return { ...current, [name]: value };
+      if (value === "intern") return { ...current, role: value, designation: "", department: "", assigned_supervisor_id: "" };
+      return { ...current, role: value, assigned_supervisor_id: "" };
+    });
     setErrors((current) => ({ ...current, [name]: "" }));
     setApiError("");
   };
@@ -55,7 +76,9 @@ export default function Register() {
       name: form.name.trim(),
       email: form.email.trim().toLowerCase(),
       password: form.password,
-      ...(form.role !== "intern" ? { designation: form.designation.trim(), department: form.department.trim() } : {}),
+      ...(form.role === "intern"
+        ? { assigned_supervisor_id: form.assigned_supervisor_id ? Number(form.assigned_supervisor_id) : null }
+        : { designation: form.designation.trim(), department: form.department.trim() }),
     };
     setSubmitting(true);
     try {
@@ -83,6 +106,7 @@ export default function Register() {
         {apiError && <div className="auth-error" role="alert">{apiError}</div>}
         <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={submit} noValidate>
           <label className="field-label sm:col-span-2">Role<select name="role" value={form.role} onChange={update} className="field-input" aria-invalid={Boolean(errors.role)}><option value="intern">Intern</option><option value="employee">Employee</option><option value="management">Management</option></select><FieldError message={errors.role} /></label>
+          {form.role === "intern" && <label className="field-label sm:col-span-2">Assigned Supervisor<select name="assigned_supervisor_id" value={form.assigned_supervisor_id} onChange={update} className="field-input" disabled={supervisorsLoading || Boolean(supervisorsError)}><option value="">{supervisorsLoading ? "Loading supervisors…" : "Not Assigned"}</option>{supervisors.map((supervisor) => <option key={supervisor.id} value={supervisor.id}>{supervisor.name}</option>)}</select>{!supervisorsLoading && !supervisorsError && supervisors.length === 0 && <span className="mt-1.5 block text-[11px] font-semibold text-slate-400">No active employees are available.</span>}{supervisorsError && <span className="mt-1.5 flex items-center justify-between gap-3 text-[11px] font-semibold text-red-600" role="alert"><span>{supervisorsError}</span><button type="button" onClick={() => setSupervisorReload((value) => value + 1)} className="inline-flex items-center gap-1 text-[#075fae]"><RefreshCw size={12} /> Retry</button></span>}</label>}
           <label className="field-label sm:col-span-2">Full Name<input name="name" value={form.name} onChange={update} className="field-input" autoComplete="name" placeholder="Your full name" aria-invalid={Boolean(errors.name)} /><FieldError message={errors.name} /></label>
           <label className="field-label sm:col-span-2">Email<input name="email" type="email" value={form.email} onChange={update} className="field-input" autoComplete="email" placeholder="name@example.com" aria-invalid={Boolean(errors.email)} /><FieldError message={errors.email} /></label>
           <label className="field-label">Password<span className="relative block"><input name="password" type={showPasswords ? "text" : "password"} value={form.password} onChange={update} className="field-input pr-12" autoComplete="new-password" placeholder="At least 8 characters" aria-invalid={Boolean(errors.password)} /><button type="button" onClick={() => setShowPasswords((value) => !value)} className="password-toggle" aria-label={showPasswords ? "Hide passwords" : "Show passwords"}>{showPasswords ? <EyeOff size={18} /> : <Eye size={18} />}</button></span><FieldError message={errors.password} /></label>

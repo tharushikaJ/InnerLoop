@@ -3,19 +3,28 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
+from ..models.user import User
 from ..schemas.auth_schema import (
     AuthResponse,
     LoginRequest,
     MessageResponse,
     RegisterRequest,
 )
-from ..schemas.user_schema import UserResponse
+from ..schemas.user_schema import SupervisorOption, UserResponse
 from ..services.auth_service import authenticate_user, register_user
 from ..utils.permissions import get_current_user
 from ..utils.security import create_access_token
 
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+
+@router.get("/supervisors", response_model=list[SupervisorOption])
+def registration_supervisors(db: Session = Depends(get_db)):
+    """Expose only active employee IDs and names needed during registration."""
+    return db.query(User).filter(
+        User.role == "employee", User.status == "active"
+    ).order_by(User.name.asc()).all()
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)

@@ -9,6 +9,8 @@ export const workspaceApi = {
   meetingRooms: () => apiRequest("/meeting-rooms"),
   reportSummary: () => apiRequest("/reports/summary"),
   users: () => apiRequest("/users"),
+  supervisors: () => apiRequest("/users/supervisors"),
+  updateUser: (userId, details) => apiRequest(`/users/${userId}`, { method: "PATCH", body: JSON.stringify(details) }),
   auditLogs: () => apiRequest("/audit-logs"),
   settings: () => apiRequest("/settings"),
 };
