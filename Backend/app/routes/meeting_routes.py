@@ -28,10 +28,10 @@ def create_meeting(payload: MeetingCreate, user=Depends(employee_only), db: Sess
 
 
 @router.put("/{meeting_id}", response_model=MeetingResponse)
-def update_meeting(meeting_id: int, payload: MeetingUpdate, _user=Depends(employee_only), db: Session = Depends(get_db)):
-    return meeting_service.update_meeting(db, meeting_id, payload)
+def update_meeting(meeting_id: int, payload: MeetingUpdate, user=Depends(employee_only), db: Session = Depends(get_db)):
+    return meeting_service.update_meeting(db, meeting_id, payload, user)
 
 
 @router.delete("/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_meeting(meeting_id: int, _user=Depends(employee_only), db: Session = Depends(get_db)):
-    meeting_service.delete_meeting(db, meeting_id)
+def delete_meeting(meeting_id: int, user=Depends(employee_only), db: Session = Depends(get_db)):
+    meeting_service.delete_meeting(db, meeting_id, user)

@@ -6,12 +6,13 @@ import {
 } from "lucide-react";
 
 import { createProject, deleteProject, getProjectOptions, listProjects, updateProject } from "../api/projectApi";
+import { createTask, getTaskOptions } from "../api/taskApi";
 import { useAuth } from "../context/AuthContext";
 import { canCreateProjects, canManageProjects } from "../utils/rolePermissions";
 
 const COMPLETE = new Set(["completed", "complete", "done", "closed"]);
 const RISK = new Set(["blocked", "delayed", "at risk", "at-risk"]);
-const emptyForm = { project_name: "", project_category: "", project_description: "", project_type: "", responsible_employee_id: "", assigned_intern_pod_id: "", current_status: "Planning", progress_percentage: 0, current_progress_update: "", next_activity: "", target_date: "", blockers: "", related_links: "" };
+const emptyForm = { project_name: "", project_category: "", project_type: "", responsible_employee_id: "", current_status: "Planning", target_date: "", related_links: "" };
 
 function normalized(value) {
   return String(value || "").trim().toLowerCase();
@@ -48,8 +49,6 @@ function formFromProject(project, responsibleEmployeeId) {
     ...emptyForm,
     ...project,
     responsible_employee_id: project.responsible_employee_id || "",
-    assigned_intern_pod_id: project.assigned_intern_pod_id || "",
-    progress_percentage: Number(project.progress_percentage) || 0,
     target_date: project.target_date || "",
   };
 }
@@ -62,17 +61,13 @@ function ProjectForm({ initialProject, options, responsibleEmployeeId, submittin
   function submit(event) {
     event.preventDefault();
     onSubmit({
-      ...form,
       project_name: form.project_name.trim(),
       project_category: nullable(form.project_category),
-      project_description: nullable(form.project_description),
       project_type: nullable(form.project_type),
       responsible_employee_id: form.responsible_employee_id ? Number(form.responsible_employee_id) : null,
-      assigned_intern_pod_id: form.assigned_intern_pod_id ? Number(form.assigned_intern_pod_id) : null,
-      progress_percentage: Number(form.progress_percentage) || 0,
-      current_progress_update: nullable(form.current_progress_update),
-      next_activity: nullable(form.next_activity), target_date: form.target_date || null,
-      blockers: nullable(form.blockers), related_links: nullable(form.related_links),
+      current_status: form.current_status,
+      target_date: form.target_date || null,
+      related_links: nullable(form.related_links),
     });
   }
   return <form className="content-card space-y-5" onSubmit={submit}>
@@ -82,18 +77,61 @@ function ProjectForm({ initialProject, options, responsibleEmployeeId, submittin
       <label className="field-label">Category<input className="field-input" value={form.project_category} onChange={update("project_category")} placeholder="e.g. Product development" /></label>
       <label className="field-label">Type<input className="field-input" value={form.project_type} onChange={update("project_type")} placeholder="e.g. Internal" /></label>
       <label className="field-label">Responsible employee<select className="field-input" value={form.responsible_employee_id} onChange={update("responsible_employee_id")}><option value="">Select an employee</option>{options.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.designation ? ` - ${employee.designation}` : ""}</option>)}</select></label>
-      <label className="field-label">Intern pod<select className="field-input" value={form.assigned_intern_pod_id} onChange={update("assigned_intern_pod_id")}><option value="">Select an intern pod</option>{options.pods.map((pod) => <option key={pod.id} value={pod.id}>{pod.pod_name}</option>)}</select></label>
       <label className="field-label">Status<select className="field-input" value={form.current_status} onChange={update("current_status")}><option>Planning</option><option>Active</option><option>In progress</option><option>On track</option><option>At risk</option><option>Blocked</option><option>Delayed</option><option>Completed</option></select></label>
       <label className="field-label">Target date<input className="field-input" type="date" value={form.target_date} onChange={update("target_date")} /></label>
-      <label className="field-label">Progress %<input className="field-input" type="number" min="0" max="100" step="0.1" value={form.progress_percentage} onChange={update("progress_percentage")} /></label>
-      <label className="field-label sm:col-span-2">Description<textarea className="field-input min-h-24 resize-y" value={form.project_description} onChange={update("project_description")} placeholder="Describe the project outcome and scope." /></label>
-      <label className="field-label">Current progress<textarea className="field-input min-h-24 resize-y" value={form.current_progress_update} onChange={update("current_progress_update")} /></label>
-      <label className="field-label">Next activity<textarea className="field-input min-h-24 resize-y" value={form.next_activity} onChange={update("next_activity")} /></label>
-      <label className="field-label">Blockers<textarea className="field-input min-h-24 resize-y" value={form.blockers} onChange={update("blockers")} /></label>
       <label className="field-label">Related links<textarea className="field-input min-h-24 resize-y" value={form.related_links} onChange={update("related_links")} placeholder="One or more project URLs" /></label>
     </div>
     <button className="primary-button w-full justify-center" disabled={submitting}>{submitting ? <LoaderCircle className="animate-spin" size={17} /> : <Check size={17} />}{submitting ? "Saving..." : editing ? "Update project" : "Save project"}</button>
   </form>;
+}
+
+function ProjectTaskPanel({ project, options, onClose }) {
+  const [form, setForm] = useState({ task_title: "", description: "", assigned_user_id: "", assigned_intern_pod_id: "", priority: "Medium", status: "To do", due_date: "" });
+  const [tasks, setTasks] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+
+  async function addTask(event) {
+    event.preventDefault();
+    if (!form.task_title.trim()) return;
+    setSaving(true); setError("");
+    try {
+      const created = await createTask({
+        task_title: form.task_title.trim(),
+        description: form.description.trim() || null,
+        project_id: project.id,
+        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
+        assigned_intern_pod_id: form.assigned_intern_pod_id ? Number(form.assigned_intern_pod_id) : null,
+        priority: form.priority,
+        status: form.status,
+        due_date: form.due_date || null,
+        created_source: "Project workspace",
+      });
+      setTasks((current) => [...current, created]);
+      setForm({ task_title: "", description: "", assigned_user_id: "", assigned_intern_pod_id: "", priority: "Medium", status: "To do", due_date: "" });
+    } catch (requestError) {
+      setError(requestError.message || "Unable to add task.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <section className="content-card border-[#0871c6]/20 bg-[#f8fbfe]">
+    <div className="flex items-center justify-between gap-3"><div><p className="eyebrow text-[#0871c6]">Project delivery</p><h3 className="section-title">Add tasks to {project.project_name}</h3><p className="mt-2 text-sm text-slate-500">Create the first work items for this project now, just like assigning interns to a pod.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close task panel"><X size={18} /></button></div>
+    <form className="mt-5 grid gap-4 lg:grid-cols-2" onSubmit={addTask}>
+      <label className="field-label lg:col-span-2">Task title<input className="field-input" value={form.task_title} onChange={update("task_title")} placeholder="e.g. Build project dashboard" required maxLength={255} /></label>
+      <label className="field-label">Assignee<select className="field-input" value={form.assigned_user_id} onChange={update("assigned_user_id")}><option value="">Assign later</option>{options.assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.name} · {assignee.role}</option>)}</select></label>
+      <label className="field-label">Intern pod<select className="field-input" value={form.assigned_intern_pod_id} onChange={update("assigned_intern_pod_id")}><option value="">No intern pod</option>{options.pods.map((pod) => <option key={pod.id} value={pod.id}>{pod.pod_name}</option>)}</select></label>
+      <label className="field-label">Priority<select className="field-input" value={form.priority} onChange={update("priority")}><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></label>
+      <label className="field-label">Status<select className="field-input" value={form.status} onChange={update("status")}><option>To do</option><option>In progress</option><option>Review</option><option>Completed</option><option>Blocked</option></select></label>
+      <label className="field-label">Due date<input className="field-input" type="date" value={form.due_date} onChange={update("due_date")} /></label>
+      <label className="field-label lg:col-span-2">Description<textarea className="field-input min-h-20 resize-y" value={form.description} onChange={update("description")} placeholder="Describe the expected outcome." /></label>
+      <div className="flex justify-end lg:col-span-2"><button className="secondary-button min-h-11 px-4" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" size={16} /> : <Plus size={16} />}{saving ? "Adding..." : "Add task"}</button></div>
+    </form>
+    {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}
+    {tasks.length > 0 && <div className="mt-5 border-t border-slate-200 pt-4"><p className="text-xs font-extrabold uppercase tracking-[.16em] text-slate-400">Added tasks ({tasks.length})</p><div className="mt-3 space-y-2">{tasks.map((task) => <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5" key={task.id}><span className="min-w-0 truncate text-sm font-semibold text-slate-700">{task.task_title}</span><span className="ml-3 shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-extrabold text-slate-500">{task.status}</span></div>)}</div></div>}
+  </section>;
 }
 
 function ProjectCard({ project, canManage, onEdit, onDelete }) {
@@ -120,7 +158,9 @@ export default function Projects() {
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [formProject, setFormProject] = useState(undefined);
+  const [taskProject, setTaskProject] = useState(null);
   const [options, setOptions] = useState({ employees: [], pods: [] });
+  const [taskOptions, setTaskOptions] = useState({ assignees: [], pods: [] });
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -128,7 +168,7 @@ export default function Projects() {
     try { setProjects(await listProjects()); } catch (requestError) { setError(requestError.message || "Unable to load projects."); } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); if (canCreate) getProjectOptions().then(setOptions).catch((requestError) => setError(requestError.message)); }, [canCreate]);
+  useEffect(() => { load(); if (canCreate) { getProjectOptions().then(setOptions).catch((requestError) => setError(requestError.message)); getTaskOptions().then(setTaskOptions).catch((requestError) => setError(requestError.message)); } }, [canCreate]);
 
   async function saveProject(payload) {
     setSaving(true); setError(""); setSuccess("");
@@ -136,6 +176,7 @@ export default function Projects() {
       const saved = formProject ? await updateProject(formProject.id, payload) : await createProject(payload);
       const wasEditing = Boolean(formProject);
       setFormProject(undefined);
+      if (!wasEditing) setTaskProject(saved);
       await load();
       setSuccess(`Project “${saved.project_name}” ${wasEditing ? "updated" : "created"} successfully.`);
     }
@@ -177,6 +218,7 @@ export default function Projects() {
   return <div className="space-y-6">
     <section className="subpage-hero"><div className="relative z-10 max-w-2xl"><div className="inline-flex items-center gap-2 rounded-full bg-[#edfbed] px-3 py-1.5 text-[10px] font-black uppercase tracking-[.15em] text-[#168f18]"><Sparkles size={13} /> {user?.role} portfolio</div><h2 className="mt-4 text-4xl font-black tracking-[-.045em] text-[#10233f] sm:text-5xl">Projects that move the lab forward.</h2><p className="mt-4 max-w-xl text-sm leading-7 text-slate-500">{roleMessage}</p>{canCreate && <button className="primary-button mt-6" onClick={() => setFormProject(null)}><Plus size={17} /> Add Project</button>}</div><div className="subpage-ring" /></section>
     {canManage && formProject !== undefined && <ProjectForm key={formProject?.id || "new"} initialProject={formProject} options={options} responsibleEmployeeId={user.id} submitting={saving} onSubmit={saveProject} onClose={() => setFormProject(undefined)} />}
+    {canCreate && taskProject && <ProjectTaskPanel project={taskProject} options={taskOptions} onClose={() => setTaskProject(null)} />}
     {success && <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" role="status"><span>{success}</span><button onClick={() => setSuccess("")} aria-label="Dismiss success message"><X size={16} /></button></div>}
     <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4"><Metric icon={CircleDot} label="In motion" value={stats.active} detail="Active delivery streams" /><Metric icon={AlertTriangle} label="Needs attention" value={stats.risk} detail="Blocked, delayed, or flagged" tone="rose" /><Metric icon={CheckCircle2} label="Completed" value={stats.completed} detail="Closed delivery loops" tone="green" /><Metric icon={Target} label="Portfolio progress" value={`${stats.average}%`} detail="Average across visible projects" /></section>
     <section className="content-card"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="eyebrow text-[#0871c6]">Portfolio explorer</p><h3 className="section-title">Projects <span className="ml-2 text-sm text-slate-400">{visible.length}</span></h3></div><div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap"><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-400 focus-within:border-blue-300 focus-within:bg-white"><Search size={16} /><input className="w-full bg-transparent text-sm text-slate-700 outline-none sm:w-48" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" aria-label="Search projects" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600"><ListFilter size={16} /><select className="bg-transparent outline-none" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter by status"><option value="all">All statuses</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600"><select className="bg-transparent outline-none" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category"><option value="all">All categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label><button className="icon-button" onClick={load} aria-label="Refresh projects"><RefreshCw size={17} /></button></div></div>
