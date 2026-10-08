@@ -140,6 +140,24 @@ def update_task(db: Session, task_id: int, user: User, payload: TaskUpdate) -> d
     return task_data(db, task)
 
 
+def delete_task(db: Session, task_id: int, user: User) -> None:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    responsible = task.project_id and db.query(Project.id).filter(
+        Project.id == task.project_id,
+        Project.responsible_employee_id == user.id,
+    ).first()
+    if user.role != "employee" or (task.assigned_user_id != user.id and not responsible):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete tasks assigned to you")
+    db.delete(task)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to delete this task") from error
+
+
 def update_task_submission(
     db: Session,
     task_id: int,

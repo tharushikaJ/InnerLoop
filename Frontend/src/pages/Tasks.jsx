@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle, CalendarClock, Check, CheckCircle2, Circle, Clock3, ExternalLink,
   ChevronDown, Flag, FolderKanban, LayoutList, LoaderCircle, RefreshCw, Search,
-  Send, SlidersHorizontal, Sparkles, Plus, UserRound, Users, X,
+  Send, SlidersHorizontal, Sparkles, Plus, Trash2, UserRound, Users, X,
 } from "lucide-react";
 
 import { listProjects } from "../api/projectApi";
-import { createTask, getTaskOptions, listTasks, submitTask } from "../api/taskApi";
+import { createTask, deleteTask, getTaskOptions, listTasks, submitTask, updateTask } from "../api/taskApi";
 import { useAuth } from "../context/AuthContext";
 import { canCreateTasks } from "../utils/rolePermissions";
 
@@ -124,8 +124,8 @@ function ProjectDropdown({ projects, selectedId, onChange }) {
   );
 }
 
-function TaskForm({ options, assignedUserId, submitting, onSubmit, onClose }) {
-  const [form, setForm] = useState({ ...emptyTaskForm, assigned_user_id: assignedUserId || "" });
+function TaskForm({ options, assignedUserId, projectId, submitting, onSubmit, onClose }) {
+  const [form, setForm] = useState({ ...emptyTaskForm, assigned_user_id: assignedUserId || "", project_id: projectId || "" });
   const employees = options.assignees.filter((user) => user.role === "employee");
   const interns = options.interns?.length? options.interns: options.assignees.filter((user) => user.role === "intern");
   const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -419,21 +419,44 @@ function SubmissionForm({ task, onSubmitted }) {
   );
 }
 
-function TaskCard({ task, projectName, isIntern, onSubmitted }) {
+function TaskOwnerActions({ task, onUpdated, onDeleted }) {
+  const [status, setStatus] = useState(task.status || "To do");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function saveStatus() {
+    setBusy(true); setError("");
+    try { onUpdated(await updateTask(task.id, { status })); }
+    catch (requestError) { setError(requestError.message || "Unable to update task."); }
+    finally { setBusy(false); }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete ${task.task_title}?`)) return;
+    setBusy(true); setError("");
+    try { await deleteTask(task.id); onDeleted(task.id); }
+    catch (requestError) { setError(requestError.message || "Unable to delete task."); setBusy(false); }
+  }
+
+  return <div className="mt-5 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center gap-2"><select className="field-input mt-0 min-h-10 flex-1 px-3 py-2 text-xs" value={status} onChange={(event) => setStatus(event.target.value)} disabled={busy} aria-label={`Update status for ${task.task_title}`}><option>To do</option><option>In progress</option><option>Review</option><option>Completed</option><option>Blocked</option></select><button type="button" className="secondary-button min-h-10 px-3 text-xs" onClick={saveStatus} disabled={busy}>Save</button><button type="button" className="icon-button h-10 w-10 hover:border-red-200 hover:bg-red-50 hover:text-red-600" onClick={remove} disabled={busy} aria-label={`Delete ${task.task_title}`} title="Delete task"><Trash2 size={15} /></button></div>{error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}</div>;
+}
+
+function TaskCard({ task, projectName, isIntern, canManage, onSubmitted, onUpdated, onDeleted }) {
   const overdue = isOverdue(task);
   return <article className={`flex h-full flex-col rounded-[26px] border bg-white p-5 shadow-[0_10px_35px_rgba(15,45,75,.045)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(15,45,75,.09)] ${overdue ? "border-rose-200" : "border-slate-200/80"}`}>
     <div className="flex items-start gap-3"><span className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${isDone(task) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#075fae]"}`}>{isDone(task) ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ring-1 ${priorityTone(task.priority)}`}><Flag className="mr-1 inline" size={10} />{task.priority || "No priority"}</span>{overdue && <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-white">Overdue</span>}</div><h3 className="mt-3 text-base font-black leading-snug text-[#10233f]">{task.task_title}</h3></div></div>
     <p className="mt-3 line-clamp-2 flex-1 text-sm leading-6 text-slate-500">{task.description || "No task description has been added."}</p>
     <div className="mt-4"><div className="flex items-center justify-between text-[11px] font-bold text-slate-500"><span>Progress</span><span>{Math.round(Number(task.progress_percentage) || 0)}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#20b51d] to-[#0871c6]" style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percentage) || 0))}%` }} /></div></div>
-    <div className="mt-5 space-y-2.5 border-t border-slate-100 pt-4 text-xs"><div className="flex items-center gap-2 text-slate-500"><FolderKanban size={14} className="text-[#075fae]" /><span className="truncate font-semibold">{task.project_name || projectName || "Independent task"}</span></div><div className="flex items-center gap-2 text-slate-500"><UserRound size={14} className="text-[#075fae]" /><span className="truncate"><span className="font-semibold">Assignee:</span> {task.assigned_user_name || "No direct assignee"}</span></div><div className="flex items-center gap-2 text-slate-500"><Users size={14} className="text-[#20a91e]" /><span className="truncate"><span className="font-semibold">Intern pod:</span> {task.assigned_intern_pod_name || "No intern pod"}</span></div><div className={`flex items-center gap-2 ${overdue ? "font-bold text-rose-600" : "text-slate-500"}`}><CalendarClock size={14} /><span>{formatDate(task.due_date)}</span></div><div className="flex items-center gap-2 text-slate-500"><Clock3 size={14} className="text-[#20a91e]" /><span className="capitalize">{task.status || "Not started"}</span></div></div>
+    <div className="mt-5 space-y-2.5 border-t border-slate-100 pt-4 text-xs"><div className="flex items-center gap-2 rounded-xl bg-[#eef8ff] px-3 py-2 text-[#075fae]"><FolderKanban size={14} /><span className="truncate"><span className="font-extrabold">Project:</span> {task.project_name || projectName || "Independent task"}</span></div><div className="flex items-center gap-2 text-slate-500"><UserRound size={14} className="text-[#075fae]" /><span className="truncate"><span className="font-semibold">Assignee:</span> {task.assigned_user_name || "No direct assignee"}</span></div><div className="flex items-center gap-2 text-slate-500"><Users size={14} className="text-[#20a91e]" /><span className="truncate"><span className="font-semibold">Intern pod:</span> {task.assigned_intern_pod_name || "No intern pod"}</span></div><div className={`flex items-center gap-2 ${overdue ? "font-bold text-rose-600" : "text-slate-500"}`}><CalendarClock size={14} /><span>{formatDate(task.due_date)}</span></div><div className="flex items-center gap-2 text-slate-500"><Clock3 size={14} className="text-[#20a91e]" /><span className="capitalize">{task.status || "Not started"}</span></div></div>
     {task.progress_note && <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">{task.progress_note}</div>}
     {task.completion_evidence_link && <a className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#075fae] hover:underline" href={task.completion_evidence_link} target="_blank" rel="noreferrer">View evidence <ExternalLink size={13} /></a>}
+    {canManage && <TaskOwnerActions task={task} onUpdated={onUpdated} onDeleted={onDeleted} />}
     {isIntern && <SubmissionForm task={task} onSubmitted={onSubmitted} />}
   </article>;
 }
 
-function TaskColumn({ title, accent, tasks, projectsById, isIntern, onSubmitted, empty }) {
-  return <section className="rounded-[28px] bg-slate-100/70 p-3 sm:p-4"><div className="mb-4 flex items-center justify-between px-2"><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${accent}`} /><h3 className="text-sm font-black text-[#10233f]">{title}</h3></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">{tasks.length}</span></div><div className="space-y-3">{tasks.length ? tasks.map((task) => <TaskCard key={task.id} task={task} projectName={projectsById.get(task.project_id)} isIntern={isIntern} onSubmitted={onSubmitted} />) : <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-10 text-center text-xs text-slate-400">{empty}</div>}</div></section>;
+function TaskColumn({ title, accent, tasks, projectsById, isIntern, canManageTask, onSubmitted, onUpdated, onDeleted, empty }) {
+  return <section className="rounded-[28px] bg-slate-100/70 p-3 sm:p-4"><div className="mb-4 flex items-center justify-between px-2"><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${accent}`} /><h3 className="text-sm font-black text-[#10233f]">{title}</h3></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">{tasks.length}</span></div><div className="space-y-3">{tasks.length ? tasks.map((task) => <TaskCard key={task.id} task={task} projectName={projectsById.get(task.project_id)} isIntern={isIntern} canManage={canManageTask(task)} onSubmitted={onSubmitted} onUpdated={onUpdated} onDeleted={onDeleted} />) : <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-10 text-center text-xs text-slate-400">{empty}</div>}</div></section>;
 }
 
 export default function Tasks() {
@@ -446,7 +469,9 @@ export default function Tasks() {
   const [success, setSuccess] = useState("");
   const [query, setQuery] = useState("");
   const [priority, setPriority] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const taskFormRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [options, setOptions] = useState({ projects: [], assignees: [], interns: [], pods: [] });
 
@@ -464,21 +489,25 @@ export default function Tasks() {
   }
 
   useEffect(() => { load(); }, [canCreate]);
+  useEffect(() => { if (formOpen) taskFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [formOpen]);
   const isIntern = user?.role === "intern";
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project.project_name])), [projects]);
+  const projectsByAccess = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
   const priorities = useMemo(() => [...new Set(tasks.map((task) => task.priority).filter(Boolean))], [tasks]);
   const visible = useMemo(() => tasks.filter((task) => {
     const haystack = [task.task_title, task.description, task.status, projectsById.get(task.project_id)].join(" ").toLowerCase();
-    return (priority === "all" || normalized(task.priority) === normalized(priority)) && haystack.includes(query.trim().toLowerCase());
-  }), [tasks, priority, query, projectsById]);
+    return (priority === "all" || normalized(task.priority) === normalized(priority)) && (projectFilter === "all" || String(task.project_id) === projectFilter) && haystack.includes(query.trim().toLowerCase());
+  }), [tasks, priority, projectFilter, query, projectsById]);
   const todo = visible.filter((task) => !isDone(task) && !DOING.has(normalized(task.status)));
   const doing = visible.filter((task) => DOING.has(normalized(task.status)));
   const done = visible.filter(isDone);
   const overdue = tasks.filter(isOverdue).length;
   const dueSoon = tasks.filter((task) => { if (!task.due_date || isDone(task)) return false; const days = (new Date(`${task.due_date}T23:59:59`) - new Date()) / 86400000; return days >= 0 && days <= 7; }).length;
   const highPriority = tasks.filter((task) => ["urgent", "critical", "high"].includes(normalized(task.priority)) && !isDone(task)).length;
+  const canManageTask = (task) => user?.role === "employee" && (task.assigned_user_id === user.id || projectsByAccess.get(task.project_id)?.responsible_employee_id === user.id);
 
   function replaceTask(updated) { setTasks((current) => current.map((task) => task.id === updated.id ? updated : task)); }
+  function removeTask(taskId) { setTasks((current) => current.filter((task) => task.id !== taskId)); }
   async function saveTask(payload) {
     setSaving(true); setError(""); setSuccess("");
     try {
@@ -495,13 +524,14 @@ export default function Tasks() {
   const roleMessage = user?.role === "management" ? "See execution pressure across the lab and spot work that needs intervention." : user?.role === "employee" ? "Turn project commitments into a clear, prioritized delivery queue." : "Focus on assigned work, evidence, and supervisor feedback.";
 
   return <div className="space-y-6">
-    <section className="subpage-hero"><div className="relative z-10 max-w-2xl"><div className="inline-flex items-center gap-2 rounded-full bg-[#edfbed] px-3 py-1.5 text-[10px] font-black uppercase tracking-[.15em] text-[#168f18]"><Sparkles size={13} /> {user?.role} execution desk</div><h2 className="mt-4 text-4xl font-black tracking-[-.045em] text-[#10233f] sm:text-5xl">Work, clearly in motion.</h2><p className="mt-4 max-w-xl text-sm leading-7 text-slate-500">{roleMessage}</p>{canCreate && <button className="primary-button mt-6" onClick={() => setFormOpen(true)}><Plus size={17} /> Add Task</button>}</div><div className="subpage-ring" /></section>
-    {canCreate && formOpen && <TaskForm options={options} assignedUserId={user.id} submitting={saving} onSubmit={saveTask} onClose={() => setFormOpen(false)} />}
+    <section className="subpage-hero"><div className="relative z-10 max-w-2xl"><div className="inline-flex items-center gap-2 rounded-full bg-[#edfbed] px-3 py-1.5 text-[10px] font-black uppercase tracking-[.15em] text-[#168f18]"><Sparkles size={13} /> {user?.role} execution desk</div><h2 className="mt-4 text-4xl font-black tracking-[-.045em] text-[#10233f] sm:text-5xl">Work, clearly in motion.</h2><p className="mt-4 max-w-xl text-sm leading-7 text-slate-500">{roleMessage}</p>{canCreate && <button type="button" className="primary-button mt-6" onClick={() => setFormOpen(true)}><Plus size={18} /> Add task</button>}</div><div className="subpage-ring" /></section>
+    {canCreate && formOpen && <div ref={taskFormRef} className="scroll-mt-24"><TaskForm key={projectFilter} options={options} assignedUserId={user.id} projectId={projectFilter === "all" ? "" : projectFilter} submitting={saving} onSubmit={saveTask} onClose={() => setFormOpen(false)} /></div>}
     {success && <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" role="status"><span>{success}</span><button onClick={() => setSuccess("")} aria-label="Dismiss success message"><X size={16} /></button></div>}
     <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4"><Metric icon={LayoutList} label="Total work" value={tasks.length} detail="Tasks in the current scope" /><Metric icon={AlertCircle} label="Overdue" value={overdue} detail="Open tasks past due" tone="rose" /><Metric icon={CalendarClock} label="Due this week" value={dueSoon} detail="Next seven days" tone="amber" /><Metric icon={CheckCircle2} label="Completed" value={tasks.filter(isDone).length} detail={`${highPriority} high-priority open`} tone="green" /></section>
-    <section className="content-card"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="eyebrow text-[#0871c6]">Delivery board</p><h3 className="section-title">Task flow <span className="ml-2 text-sm text-slate-400">{visible.length}</span></h3></div><div className="flex flex-col gap-3 sm:flex-row"><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-400 focus-within:border-blue-300 focus-within:bg-white"><Search size={16} /><input className="w-full bg-transparent text-sm text-slate-700 outline-none sm:w-56" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search task or project" aria-label="Search tasks" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600"><SlidersHorizontal size={16} /><select className="bg-transparent outline-none" value={priority} onChange={(event) => setPriority(event.target.value)} aria-label="Filter by priority"><option value="all">All priorities</option>{priorities.map((item) => <option key={item}>{item}</option>)}</select></label><button className="icon-button" onClick={load} aria-label="Refresh tasks"><RefreshCw size={17} /></button></div></div>
+    <section className="content-card"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#0871c6]">Project workspaces</p><h3 className="section-title">Tasks by project</h3></div><div className="flex items-center gap-3"><span className="text-xs font-bold text-slate-400">{projectFilter === "all" ? "All projects" : projects.find((project) => String(project.id) === projectFilter)?.project_name || "Selected project"}</span>{canCreate && <button type="button" className="icon-button" onClick={() => setFormOpen(true)} aria-label="Add task" title="Add task"><Plus size={17} /></button>}</div></div><div className="flex gap-2 overflow-x-auto pb-1"><button type="button" className={`shrink-0 rounded-xl border px-4 py-2.5 text-xs font-extrabold transition ${projectFilter === "all" ? "border-[#075fae] bg-[#075fae] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-[#075fae]"}`} onClick={() => setProjectFilter("all")} aria-pressed={projectFilter === "all"}>All projects</button>{projects.map((project) => <button type="button" className={`shrink-0 rounded-xl border px-4 py-2.5 text-xs font-extrabold transition ${projectFilter === String(project.id) ? "border-[#075fae] bg-[#075fae] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-[#075fae]"}`} key={project.id} onClick={() => setProjectFilter(String(project.id))} aria-pressed={projectFilter === String(project.id)}>{project.project_name}</button>)}</div></section>
+    <section className="content-card"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="eyebrow text-[#0871c6]">Delivery board</p><h3 className="section-title">Task flow <span className="ml-2 text-sm text-slate-400">{visible.length}</span></h3></div><div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap"><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-400 focus-within:border-blue-300 focus-within:bg-white"><Search size={16} /><input className="w-full bg-transparent text-sm text-slate-700 outline-none sm:w-56" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search task or project" aria-label="Search tasks" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600"><FolderKanban size={16} /><select className="max-w-44 bg-transparent outline-none" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} aria-label="Filter by project"><option value="all">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.project_name}</option>)}</select></label><label className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600"><SlidersHorizontal size={16} /><select className="bg-transparent outline-none" value={priority} onChange={(event) => setPriority(event.target.value)} aria-label="Filter by priority"><option value="all">All priorities</option>{priorities.map((item) => <option key={item}>{item}</option>)}</select></label><button className="icon-button" onClick={load} aria-label="Refresh tasks"><RefreshCw size={17} /></button>{canCreate && <button type="button" className="icon-button" onClick={() => setFormOpen(true)} aria-label="Add task" title="Add task"><Plus size={17} /></button>}</div></div>
       {error && <div className="mt-5 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
-      {loading ? <div className="flex items-center justify-center gap-2 py-20 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={19} /> Loading delivery board...</div> : <div className="mt-6 grid items-start gap-4 xl:grid-cols-3"><TaskColumn title="To do" accent="bg-slate-400" tasks={todo} projectsById={projectsById} isIntern={isIntern} onSubmitted={replaceTask} empty="No queued work" /><TaskColumn title="In progress" accent="bg-[#0871c6]" tasks={doing} projectsById={projectsById} isIntern={isIntern} onSubmitted={replaceTask} empty="Nothing in motion" /><TaskColumn title="Done" accent="bg-[#20b51d]" tasks={done} projectsById={projectsById} isIntern={isIntern} onSubmitted={replaceTask} empty="No completed work yet" /></div>}
+      {loading ? <div className="flex items-center justify-center gap-2 py-20 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={19} /> Loading delivery board...</div> : <div className="mt-6 grid items-start gap-4 xl:grid-cols-3"><TaskColumn title="To do" accent="bg-slate-400" tasks={todo} projectsById={projectsById} isIntern={isIntern} canManageTask={canManageTask} onSubmitted={replaceTask} onUpdated={replaceTask} onDeleted={removeTask} empty="No queued work" /><TaskColumn title="In progress" accent="bg-[#0871c6]" tasks={doing} projectsById={projectsById} isIntern={isIntern} canManageTask={canManageTask} onSubmitted={replaceTask} onUpdated={replaceTask} onDeleted={removeTask} empty="Nothing in motion" /><TaskColumn title="Done" accent="bg-[#20b51d]" tasks={done} projectsById={projectsById} isIntern={isIntern} canManageTask={canManageTask} onSubmitted={replaceTask} onUpdated={replaceTask} onDeleted={removeTask} empty="No completed work yet" /></div>}
     </section>
   </div>;
 }

@@ -349,7 +349,7 @@ def test_meetings_support_scheduling_room_conflicts_and_owner_permissions():
     }).status_code == 200
 
     assert login("management", "management@example.com").status_code == 200
-    assert client.delete(f"/api/meetings/{meeting_id}").status_code == 204
+    assert client.delete(f"/api/meetings/{meeting_id}").status_code == 403
 
 
 def test_employee_can_create_projects_and_tasks_that_persist_with_existing_visibility_rules():
