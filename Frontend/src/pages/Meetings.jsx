@@ -9,7 +9,7 @@ const meetingTypes = ["Team sync", "Project review", "One-on-one", "Client meeti
 const meetingStatuses = ["Scheduled", "In progress", "Completed", "Cancelled"];
 const emptyForm = {
 	meeting_title: "",
-	meeting_type: "Team syn",
+	meeting_type: "Team sync",
 	start_datetime: "",
 	end_datetime: "",
 	meeting_room_id: "",
