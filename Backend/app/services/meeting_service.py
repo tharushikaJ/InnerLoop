@@ -57,6 +57,11 @@ def _save_links(db: Session, meeting_id: int, attendee_user_ids: list[int], proj
 def _ensure_room_available(db: Session, room_id: int | None, start_datetime, end_datetime, exclude_meeting_id: int | None = None) -> None:
 	if room_id is None:
 		return
+	room = db.query(MeetingRoom).filter(MeetingRoom.id == room_id).first()
+	if not room:
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The selected meeting room does not exist")
+	if (room.status or "").lower() != "available":
+		raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The selected meeting room is not available")
 	query = db.query(Meeting).filter(
 		Meeting.meeting_room_id == room_id,
 		Meeting.start_datetime < end_datetime,
@@ -84,10 +89,16 @@ def create_meeting(db: Session, payload: MeetingCreate, created_by: int) -> dict
 	return _meeting_data(db, meeting)
 
 
-def update_meeting(db: Session, meeting_id: int, payload: MeetingUpdate) -> dict:
+def _can_manage_meeting(meeting: Meeting, user: User) -> bool:
+	return user.role == "management" or meeting.created_by == user.id
+
+
+def update_meeting(db: Session, meeting_id: int, payload: MeetingUpdate, user: User) -> dict:
 	meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
 	if not meeting:
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+	if not _can_manage_meeting(meeting, user):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update meetings you created")
 	_ensure_room_available(db, payload.meeting_room_id, payload.start_datetime, payload.end_datetime, meeting_id)
 	for field, value in payload.model_dump(exclude={"attendee_user_ids", "project_ids"}).items():
 		setattr(meeting, field, value)
@@ -101,9 +112,11 @@ def update_meeting(db: Session, meeting_id: int, payload: MeetingUpdate) -> dict
 	return _meeting_data(db, meeting)
 
 
-def delete_meeting(db: Session, meeting_id: int) -> None:
+def delete_meeting(db: Session, meeting_id: int, user: User) -> None:
 	meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
 	if not meeting:
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+	if not _can_manage_meeting(meeting, user):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete meetings you created")
 	db.delete(meeting)
 	db.commit()
