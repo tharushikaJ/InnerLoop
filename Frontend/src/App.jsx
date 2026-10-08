@@ -145,7 +145,7 @@ function AppShell({ children }) {
   const calendarFocusMode = location.pathname.startsWith("/calendar");
   useEffect(() => { setSidebarCollapsed(calendarFocusMode); setMenuOpen(false); }, [calendarFocusMode]);
   const toggleSidebar = () => { setSidebarCollapsed((value) => !value); setMenuOpen((value) => !value); };
-  return <div className="min-h-screen bg-[#f5f8fb]"><Sidebar open={menuOpen} collapsed={sidebarCollapsed} onClose={() => setMenuOpen(false)} /><Header onToggleSidebar={toggleSidebar} sidebarOpen={!sidebarCollapsed} notificationsOpen={notificationsOpen} onNotifications={() => setNotificationsOpen((value) => !value)} /><NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /><main className={sidebarCollapsed ? "" : "lg:ml-[278px]"}><div className="mx-auto max-w-[1540px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">{children}</div></main></div>;
+  return <div className="min-h-screen bg-[#f5f8fb]"><Sidebar open={menuOpen} collapsed={sidebarCollapsed} onClose={() => setMenuOpen(false)} /><Header onToggleSidebar={toggleSidebar} sidebarOpen={!sidebarCollapsed} notificationsOpen={notificationsOpen} onNotifications={() => setNotificationsOpen((value) => !value)} /><NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /><main className={sidebarCollapsed ? "" : "lg:ml-[278px]"}><div key={location.pathname} className="page-transition mx-auto max-w-[1540px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">{children}</div></main></div>;
 }
 
 function WrappedPage({ children }) { return <AppShell>{children}</AppShell>; }
