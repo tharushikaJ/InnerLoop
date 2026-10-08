@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Check, ChevronDown, Clock3, LoaderCircle, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, LoaderCircle, MapPin, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 
 import { createMeeting, deleteMeeting, getMeetingOptions, listMeetings, updateMeeting } from "../api/meetingApi";
 import { useAuth } from "../context/AuthContext";
@@ -77,6 +77,7 @@ export default function Meetings() {
 	const [meetings, setMeetings] = useState([]);
 	const [options, setOptions] = useState({ attendees: [], projects: [], rooms: [] });
 	const [form, setForm] = useState(null);
+	const [calendarDate, setCalendarDate] = useState(new Date());
 	const [loading, setLoading] = useState(true);
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState("");

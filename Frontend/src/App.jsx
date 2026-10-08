@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
-  BarChart3, Bell, CalendarDays, CheckSquare, ChevronRight,
+  BarChart3, Bell, CalendarClock, CalendarDays, CheckSquare, ChevronRight,
   DoorOpen, FolderKanban, LayoutDashboard, LogOut, Menu, Search, Settings,
   ShieldCheck, Sparkles, Users, X,
 } from "lucide-react";
@@ -19,13 +19,15 @@ import InternPods from "./pages/InternPods";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
 import Meetings from "./pages/Meetings";
+import Calendar from "./pages/Calendar";
 import MeetingRoom from "./pages/MeetingRoom";
 
 const commonItems = {
   overview: { label: "Overview", path: "/dashboard", icon: LayoutDashboard },
   projects: { label: "Projects", path: "/projects", icon: FolderKanban },
   tasks: { label: "Tasks", path: "/tasks", icon: CheckSquare },
-  meetings: { label: "Meetings", path: "/meetings", icon: CalendarDays },
+  meetings: { label: "Meetings", path: "/meetings", icon: CalendarClock },
+  calendar: { label: "Calendar", path: "/calendar", icon: CalendarDays },
   pods: { label: "Intern pods", path: "/intern-pods", icon: Users },
   rooms: { label: "Meeting rooms", path: "/meeting-room", icon: DoorOpen },
   reports: { label: "Reports", path: "/reports", icon: BarChart3 },
@@ -37,11 +39,11 @@ const commonItems = {
 const navigationByRole = {
   intern: [{ section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks] }],
   employee: [
-    { section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks, commonItems.meetings] },
+    { section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks, commonItems.meetings, commonItems.calendar] },
     { section: "MANAGEMENT", items: [commonItems.pods, commonItems.rooms, commonItems.reports] },
   ],
   management: [
-    { section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks, commonItems.meetings] },
+    { section: "MAIN", items: [commonItems.overview, commonItems.projects, commonItems.tasks, commonItems.meetings, commonItems.calendar] },
     { section: "MANAGEMENT", items: [commonItems.pods, commonItems.rooms, commonItems.reports] },
     { section: "ADMINISTRATION", items: [commonItems.users, commonItems.settings, commonItems.audit] },
   ],
@@ -49,7 +51,7 @@ const navigationByRole = {
 
 const pageNames = [...Object.values(commonItems), { label: "Profile", path: "/profile" }];
 
-function Sidebar({ open, onClose }) {
+function Sidebar({ open, collapsed, onClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -66,7 +68,7 @@ function Sidebar({ open, onClose }) {
   return (
     <>
       {open && <button className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden" onClick={onClose} aria-label="Close navigation" />}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-r border-slate-200/80 bg-white transition-transform duration-300 lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-r border-slate-200/80 bg-white transition-transform duration-300 ${collapsed ? "-translate-x-full" : open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="flex h-[94px] items-center justify-between px-7"><Brand /><button onClick={onClose} className="icon-button lg:hidden" aria-label="Close menu"><X size={20} /></button></div>
         <div className="mx-5 mb-6 rounded-[22px] bg-gradient-to-br from-[#075fae] to-[#087bd1] p-4 text-white shadow-lg shadow-blue-900/10">
           <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-white/15"><Sparkles size={19} /></div><div><p className="text-sm font-bold">Digital Lab</p><p className="text-[11px] text-blue-100">Role-secured workspace</p></div></div>
@@ -80,14 +82,14 @@ function Sidebar({ open, onClose }) {
   );
 }
 
-function Header({ onMenu, onNotifications, notificationsOpen }) {
+function Header({ onToggleSidebar, onNotifications, notificationsOpen, sidebarOpen = false }) {
   const location = useLocation();
   const { user } = useAuth();
   const current = pageNames.find((item) => location.pathname.startsWith(item.path));
   const initials = user?.name?.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "IL";
   return (
-    <header className="sticky top-0 z-30 flex h-[82px] items-center justify-between border-b border-slate-200/70 bg-white/90 px-5 backdrop-blur-xl sm:px-8 lg:ml-[278px] lg:px-10">
-      <div className="flex items-center gap-4"><button onClick={onMenu} className="icon-button lg:hidden" aria-label="Open menu"><Menu size={21} /></button><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#20a91e]">InnerLoop workspace</p><h1 className="mt-0.5 text-xl font-extrabold tracking-tight text-[#10233f]">{current?.label || "Overview"}</h1></div></div>
+    <header className={`sticky top-0 z-30 flex h-[82px] items-center justify-between border-b border-slate-200/70 bg-white/90 px-5 backdrop-blur-xl sm:px-8 lg:px-10 ${sidebarOpen ? "lg:ml-[278px]" : ""}`}>
+      <div className="flex items-center gap-4"><button onClick={onToggleSidebar} className="icon-button" aria-label={sidebarOpen ? "Hide navigation" : "Show navigation"}><Menu size={21} /></button><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#20a91e]">InnerLoop workspace</p><h1 className="mt-0.5 text-xl font-extrabold tracking-tight text-[#10233f]">{current?.label || "Overview"}</h1></div></div>
       <div className="flex items-center gap-2 sm:gap-3"><div className="header-search"><Search size={17} /><input aria-label="Search workspace" placeholder="Search workspace…" /></div><button onClick={onNotifications} className={`icon-button relative ${notificationsOpen ? "text-[#075fae]" : ""}`} aria-label="Notifications"><Bell size={19} /></button><Link to="/profile" className="hidden items-center gap-2.5 rounded-full p-1 pr-2 transition hover:bg-slate-50 sm:flex"><div className="grid h-10 w-10 place-items-center rounded-full bg-[#e7f3ff] text-sm font-extrabold text-[#075fae]">{initials}</div><div className="hidden text-left xl:block"><p className="max-w-32 truncate text-xs font-bold text-slate-800">{user?.name}</p><p className="text-[10px] capitalize text-slate-400">{user?.role}</p></div></Link></div>
     </header>
   );
@@ -135,9 +137,14 @@ function ApiPage({ name, load }) {
 }
 
 function AppShell({ children }) {
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  return <div className="min-h-screen bg-[#f5f8fb]"><Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} /><Header onMenu={() => setMenuOpen(true)} notificationsOpen={notificationsOpen} onNotifications={() => setNotificationsOpen((value) => !value)} /><NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /><main className="lg:ml-[278px]"><div className="mx-auto max-w-[1540px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">{children}</div></main></div>;
+  const calendarFocusMode = location.pathname.startsWith("/calendar");
+  useEffect(() => { setSidebarCollapsed(calendarFocusMode); setMenuOpen(false); }, [calendarFocusMode]);
+  const toggleSidebar = () => { setSidebarCollapsed((value) => !value); setMenuOpen((value) => !value); };
+  return <div className="min-h-screen bg-[#f5f8fb]"><Sidebar open={menuOpen} collapsed={sidebarCollapsed} onClose={() => setMenuOpen(false)} /><Header onToggleSidebar={toggleSidebar} sidebarOpen={!sidebarCollapsed} notificationsOpen={notificationsOpen} onNotifications={() => setNotificationsOpen((value) => !value)} /><NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /><main className={sidebarCollapsed ? "" : "lg:ml-[278px]"}><div className="mx-auto max-w-[1540px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">{children}</div></main></div>;
 }
 
 function WrappedPage({ children }) { return <AppShell>{children}</AppShell>; }
@@ -155,6 +162,7 @@ export default function App() {
         <Route path="/profile" element={<WrappedPage><Profile /></WrappedPage>} />
         <Route element={<RoleProtectedRoute allowedRoles={["employee", "management"]} />}>
           <Route path="/meetings/*" element={<WrappedPage><Meetings /></WrappedPage>} />
+          <Route path="/calendar/*" element={<WrappedPage><Calendar /></WrappedPage>} />
           <Route path="/intern-pods/*" element={<WrappedPage><InternPods /></WrappedPage>} />
           <Route path="/reports/*" element={<WrappedPage><ApiPage name="Reports" load={workspaceApi.reportSummary} /></WrappedPage>} />
           <Route path="/meeting-room/*" element={<WrappedPage><MeetingRoom /></WrappedPage>} />
