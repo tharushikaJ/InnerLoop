@@ -12,6 +12,7 @@ import {
 import { listProjects } from "../api/projectApi";
 import { useAuth } from "../context/AuthContext";
 import { canManageOperations } from "../utils/rolePermissions";
+import SmoothReveal from "../components/SmoothReveal";
 
 const emptyForm = {
 	pod_name: "",
@@ -139,7 +140,7 @@ export default function InternPods() {
 	return (
 		<div className="space-y-7">
 			<section className="subpage-hero"><div className="relative z-10 max-w-xl"><p className="eyebrow text-[#199d1c]">Digital Lab workspace</p><h2 className="mt-2 text-4xl font-black tracking-[-0.04em] text-[#10233f]">Intern pods</h2><p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">Organize mentors, interns and feature work in one connected pod.</p>{canManage && <button className="primary-button mt-6" onClick={() => setForm({ ...emptyForm })}><Plus size={17} /> Add intern pod</button>}</div><div className="subpage-ring" /></section>
-			{canManage && form && <PodForm initialValues={form} projects={projects} mentorName={user?.name || ""} submitting={saving} onSubmit={savePod} onClose={() => setForm(null)} />}
+			{canManage && form && <SmoothReveal revealKey={form.id || "new-pod"}><PodForm initialValues={form} projects={projects} mentorName={user?.name || ""} submitting={saving} onSubmit={savePod} onClose={() => setForm(null)} /></SmoothReveal>}
 			<section className="content-card"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#0871c6]">Live data</p><h3 className="section-title">All intern pods <span className="ml-2 text-sm font-bold text-slate-400">{pods.length}</span></h3></div><button className="icon-button" onClick={loadPods} aria-label="Refresh intern pods"><RefreshCw size={17} /></button></div>{error && <div className="mb-4 flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss error"><X size={16} /></button></div>}{loading ? <div className="flex items-center justify-center gap-2 py-14 text-sm font-semibold text-slate-400"><LoaderCircle className="animate-spin" size={18} /> Loading intern pods...</div> : pods.length ? <div className="space-y-3">{pods.map((pod) => <PodRow key={pod.id} pod={pod} interns={interns} expanded={expandedId === pod.id} canManage={canManage} onToggle={(id) => setExpandedId(expandedId === id ? null : id)} onEdit={(item) => setForm({ ...formFromPod(item), id: item.id })} onDelete={removePod} onMemberAdded={loadPods} onMemberDeleted={loadPods} />)}</div> : <div className="py-14 text-center"><Users className="mx-auto text-slate-300" size={36} /><p className="mt-3 text-sm font-extrabold text-slate-600">No intern pods yet</p><p className="mt-1 text-sm text-slate-400">Create the first pod to connect interns with a project.</p></div>}</section>
 		</div>
 	);
