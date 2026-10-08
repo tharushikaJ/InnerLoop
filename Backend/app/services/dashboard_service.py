@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..models.intern_pod import InternPod
 from ..models.meeting import Meeting, MeetingAttendee
 from ..models.user import User
-from .project_service import project_data, projects_for_user
+from .project_service import calculated_project_progress, project_data, projects_for_user
 from .task_service import task_data, tasks_for_user
 
 
@@ -28,7 +28,7 @@ def dashboard_for_user(db: Session, user: User) -> dict:
         "overdue_tasks": len(overdue_tasks),
         "completed_tasks": len(tasks) - len(open_tasks),
         "completed_projects": len([project for project in projects if (project.current_status or "").lower() in DONE_STATUSES]),
-        "average_progress": round(sum(float(project.progress_percentage or 0) for project in projects) / len(projects)) if projects else 0,
+        "average_progress": round(sum(float(calculated_project_progress(db, project.id)) for project in projects) / len(projects)) if projects else 0,
         "active_projects": len([
             project for project in projects
             if (project.current_status or "").lower() in {"active", "in progress", "on track"}

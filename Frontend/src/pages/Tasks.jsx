@@ -321,7 +321,6 @@ function SubmissionForm({ task, onSubmitted }) {
   const [form, setForm] = useState({
     completion_evidence_link: task.completion_evidence_link || "",
     progress_note: task.progress_note || "",
-    progress_percentage: Number(task.progress_percentage) || 0,
   });
 
   const [saving, setSaving] = useState(false);
@@ -363,20 +362,6 @@ function SubmissionForm({ task, onSubmitted }) {
 
       {open && (
         <form className="mt-4 space-y-4" onSubmit={save}>
-          <label className="field-label">
-            Progress %
-            <input
-              className="field-input"
-              type="number"
-              min="0"
-              max="100"
-              step="1"
-              required
-              value={form.progress_percentage}
-              onChange={update("progress_percentage")}
-            />
-          </label>
-
           <label className="field-label">
             Evidence link
             <input

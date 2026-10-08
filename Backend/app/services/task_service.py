@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,6 +10,24 @@ from ..models.intern_pod import InternPod
 from ..models.user import User
 from ..schemas.task_schema import TaskCreate, TaskSubmissionUpdate, TaskUpdate
 from .project_service import intern_pod_ids, intern_project_ids
+
+
+DONE_STATUSES = {"completed", "done", "closed"}
+
+
+def refresh_project_progress(db: Session, project_ids: list[int | None]) -> None:
+    """Recalculate each affected project's progress from its completed task count."""
+    for project_id in {project_id for project_id in project_ids if project_id is not None}:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            continue
+        tasks = db.query(Task.status).filter(Task.project_id == project_id).all()
+        total = len(tasks)
+        completed = sum((task_status or "").lower() in DONE_STATUSES for (task_status,) in tasks)
+        project.progress_percentage = (
+            (Decimal(completed * 100) / Decimal(total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if total else Decimal("0")
+        )
 
 
 def tasks_for_user(db: Session, user: User) -> list[Task]:
@@ -95,6 +114,8 @@ def create_task(
     task = Task(**values)
     db.add(task)
     try:
+        db.flush()
+        refresh_project_progress(db, [task.project_id])
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -129,9 +150,11 @@ def update_task(db: Session, task_id: int, user: User, payload: TaskUpdate) -> d
         allowed = {"status", "progress_note", "completion_evidence_link"}
         if set(values) - allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update task progress and evidence")
+    previous_project_id = task.project_id
     for field, value in values.items():
         setattr(task, field, value)
     try:
+        refresh_project_progress(db, [previous_project_id, task.project_id])
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -150,8 +173,11 @@ def delete_task(db: Session, task_id: int, user: User) -> None:
     ).first()
     if user.role != "employee" or (task.assigned_user_id != user.id and not responsible):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete tasks assigned to you")
+    project_id = task.project_id
     db.delete(task)
     try:
+        db.flush()
+        refresh_project_progress(db, [project_id])
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -171,15 +197,9 @@ def update_task_submission(
     if not _can_work_on_task(db, task, user) or user.role == "management":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot update this task")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True, exclude={"progress_percentage"}).items():
         setattr(task, field, value)
-    if payload.progress_percentage is not None:
-        if payload.progress_percentage >= 100:
-            task.status = "Completed"
-        elif payload.progress_percentage > 10:
-            task.status = "In progress"
-        else:
-            task.status = "To do"
+    refresh_project_progress(db, [task.project_id])
     db.commit()
     db.refresh(task)
     return task_data(db, task)

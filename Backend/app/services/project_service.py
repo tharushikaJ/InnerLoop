@@ -1,10 +1,12 @@
 from fastapi import HTTPException, status
+from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models.intern_pod import InternPod, InternPodMember
 from ..models.project import Project
+from ..models.task import Task
 from ..models.user import User
 from ..schemas.project_schema import ProjectCreate, ProjectUpdate
 
@@ -49,6 +51,14 @@ def projects_for_user(db: Session, user: User) -> list[Project]:
     return query.order_by(Project.updated_at.desc(), Project.id.desc()).all()
 
 
+def calculated_project_progress(db: Session, project_id: int) -> Decimal:
+    statuses = db.query(Task.status).filter(Task.project_id == project_id).all()
+    if not statuses:
+        return Decimal("0")
+    completed = sum((task_status or "").lower() in {"completed", "done", "closed"} for (task_status,) in statuses)
+    return (Decimal(completed * 100) / Decimal(len(statuses))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def project_data(db: Session, project: Project) -> dict:
     employee_name = None
     pod_name = None
@@ -56,10 +66,12 @@ def project_data(db: Session, project: Project) -> dict:
         employee_name = db.query(User.name).filter(User.id == project.responsible_employee_id).scalar()
     if project.assigned_intern_pod_id:
         pod_name = db.query(InternPod.pod_name).filter(InternPod.id == project.assigned_intern_pod_id).scalar()
+    progress = calculated_project_progress(db, project.id)
     return {
         column.name: getattr(project, column.name)
         for column in Project.__table__.columns
     } | {
+		"progress_percentage": progress,
         "responsible_employee_name": employee_name,
         "assigned_intern_pod_name": pod_name,
     }
