@@ -213,16 +213,75 @@ def test_intern_data_is_sql_scoped_and_privileged_routes_are_forbidden():
 
     tasks = client.get("/api/tasks")
     assert tasks.status_code == 200
-    assert {item["task_title"] for item in tasks.json()} == {"Direct Task", "Pod Task"}
+    assert {item["task_title"] for item in tasks.json()} == {"Direct Task", "Pod Task", "Responsible Project Task"}
 
     dashboard = client.get("/api/dashboard")
     assert dashboard.status_code == 200
     assert dashboard.json()["role"] == "intern"
     assert dashboard.json()["metrics"]["projects"] == 2
-    assert dashboard.json()["metrics"]["open_tasks"] == 2
+    assert dashboard.json()["metrics"]["open_tasks"] == 3
 
     for path in ("/api/meetings", "/api/intern-pods", "/api/meeting-rooms", "/api/reports/summary", "/api/users", "/api/settings", "/api/audit-logs"):
         assert client.get(path).status_code == 403
+
+
+def test_intern_can_view_and_submit_tasks_from_projects_assigned_through_their_pod():
+    seed_rbac_workspace()
+    with TestingSession() as db:
+        reverse_project = db.query(Project).filter(Project.project_name == "Reverse Assigned Project").one()
+        other_project = db.query(Project).filter(Project.project_name == "Pod Two Project").one()
+        reverse_task = Task(task_title="Reverse Project Task", project_id=reverse_project.id, status="todo")
+        other_task = Task(task_title="Other Project Task", project_id=other_project.id, status="todo")
+        db.add_all([reverse_task, other_task])
+        db.commit()
+        reverse_task_id = reverse_task.id
+        other_task_id = other_task.id
+
+    assert login("intern", "intern@example.com").status_code == 200
+    visible_projects = {item["project_name"] for item in client.get("/api/projects").json()}
+    visible_tasks = {item["task_title"] for item in client.get("/api/tasks").json()}
+
+    assert visible_projects == {"Pod One Project", "Reverse Assigned Project"}
+    assert "Reverse Project Task" in visible_tasks
+    assert "Other Project Task" not in visible_tasks
+
+    submission = client.patch(
+        f"/api/tasks/{reverse_task_id}/submission",
+        json={"progress_note": "Started the pod project work.", "progress_percentage": 10},
+    )
+    assert submission.status_code == 200
+    assert submission.json()["progress_percentage"] == "10.00"
+    assert submission.json()["status"] == "To do"
+
+    in_progress = client.patch(
+        f"/api/tasks/{reverse_task_id}/submission",
+        json={"progress_percentage": 11},
+    )
+    assert in_progress.status_code == 200
+    assert in_progress.json()["progress_percentage"] == "11.00"
+    assert in_progress.json()["status"] == "In progress"
+
+    completed = client.patch(
+        f"/api/tasks/{reverse_task_id}/submission",
+        json={"progress_note": "Completed the pod project work.", "progress_percentage": 100},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["progress_percentage"] == "100.00"
+    assert completed.json()["status"] == "Completed"
+
+    persisted = next(item for item in client.get("/api/tasks").json() if item["id"] == reverse_task_id)
+    assert persisted["progress_percentage"] == "100.00"
+    assert persisted["status"] == "Completed"
+    overview_task = next(
+        item for item in client.get("/api/dashboard").json()["tasks"]
+        if item["id"] == reverse_task_id
+    )
+    assert overview_task["progress_percentage"] == "100.00"
+    assert overview_task["status"] == "Completed"
+    assert client.patch(
+        f"/api/tasks/{other_task_id}/submission",
+        json={"progress_note": "Should not be accepted.", "progress_percentage": 50},
+    ).status_code == 403
 
 
 def test_employee_can_use_operational_routes_but_not_administration():

@@ -320,6 +320,7 @@ function SubmissionForm({ task, onSubmitted }) {
   const [form, setForm] = useState({
     completion_evidence_link: task.completion_evidence_link || "",
     progress_note: task.progress_note || "",
+    progress_percentage: Number(task.progress_percentage) || 0,
   });
 
   const [saving, setSaving] = useState(false);
@@ -361,6 +362,20 @@ function SubmissionForm({ task, onSubmitted }) {
 
       {open && (
         <form className="mt-4 space-y-4" onSubmit={save}>
+          <label className="field-label">
+            Progress %
+            <input
+              className="field-input"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              required
+              value={form.progress_percentage}
+              onChange={update("progress_percentage")}
+            />
+          </label>
+
           <label className="field-label">
             Evidence link
             <input
@@ -409,6 +424,7 @@ function TaskCard({ task, projectName, isIntern, onSubmitted }) {
   return <article className={`flex h-full flex-col rounded-[26px] border bg-white p-5 shadow-[0_10px_35px_rgba(15,45,75,.045)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(15,45,75,.09)] ${overdue ? "border-rose-200" : "border-slate-200/80"}`}>
     <div className="flex items-start gap-3"><span className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${isDone(task) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#075fae]"}`}>{isDone(task) ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ring-1 ${priorityTone(task.priority)}`}><Flag className="mr-1 inline" size={10} />{task.priority || "No priority"}</span>{overdue && <span className="rounded-full bg-rose-600 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-white">Overdue</span>}</div><h3 className="mt-3 text-base font-black leading-snug text-[#10233f]">{task.task_title}</h3></div></div>
     <p className="mt-3 line-clamp-2 flex-1 text-sm leading-6 text-slate-500">{task.description || "No task description has been added."}</p>
+    <div className="mt-4"><div className="flex items-center justify-between text-[11px] font-bold text-slate-500"><span>Progress</span><span>{Math.round(Number(task.progress_percentage) || 0)}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#20b51d] to-[#0871c6]" style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percentage) || 0))}%` }} /></div></div>
     <div className="mt-5 space-y-2.5 border-t border-slate-100 pt-4 text-xs"><div className="flex items-center gap-2 text-slate-500"><FolderKanban size={14} className="text-[#075fae]" /><span className="truncate font-semibold">{task.project_name || projectName || "Independent task"}</span></div><div className="flex items-center gap-2 text-slate-500"><UserRound size={14} className="text-[#075fae]" /><span className="truncate"><span className="font-semibold">Assignee:</span> {task.assigned_user_name || "No direct assignee"}</span></div><div className="flex items-center gap-2 text-slate-500"><Users size={14} className="text-[#20a91e]" /><span className="truncate"><span className="font-semibold">Intern pod:</span> {task.assigned_intern_pod_name || "No intern pod"}</span></div><div className={`flex items-center gap-2 ${overdue ? "font-bold text-rose-600" : "text-slate-500"}`}><CalendarClock size={14} /><span>{formatDate(task.due_date)}</span></div><div className="flex items-center gap-2 text-slate-500"><Clock3 size={14} className="text-[#20a91e]" /><span className="capitalize">{task.status || "Not started"}</span></div></div>
     {task.progress_note && <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">{task.progress_note}</div>}
     {task.completion_evidence_link && <a className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#075fae] hover:underline" href={task.completion_evidence_link} target="_blank" rel="noreferrer">View evidence <ExternalLink size={13} /></a>}

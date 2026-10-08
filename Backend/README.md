@@ -30,6 +30,16 @@ Open:
 - Health check: `http://localhost:8000/health`
 - OpenAPI documentation: `http://localhost:8000/docs`
 
+## Database migrations
+
+Docker Compose runs the checked-in SQL migrations before starting the backend.
+For a backend running directly on the host, set `DATABASE_URL` to the host
+PostgreSQL connection and run:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.migrate
+```
+
 ## Authentication endpoints
 
 - `POST /api/auth/register`

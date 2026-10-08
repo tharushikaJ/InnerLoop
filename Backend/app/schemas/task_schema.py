@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,6 +38,7 @@ class TaskOptionsResponse(BaseModel):
 class TaskSubmissionUpdate(BaseModel):
     completion_evidence_link: str | None = None
     progress_note: str | None = None
+    progress_percentage: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class TaskResponse(BaseModel):
@@ -48,6 +50,7 @@ class TaskResponse(BaseModel):
     assigned_intern_pod_id: int | None = None
     priority: str | None = None
     status: str | None = None
+    progress_percentage: Decimal = Decimal("0")
     due_date: date | None = None
     progress_note: str | None = None
     created_source: str | None = None

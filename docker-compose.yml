@@ -17,7 +17,18 @@ services:
     environment:
       DATABASE_URL: postgresql://innerloop_user:innerloop_password@postgres:5432/innerloop_db
     depends_on:
-      - postgres
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build: ./Backend
+    environment:
+      DATABASE_URL: postgresql://innerloop_user:innerloop_password@postgres:5432/innerloop_db
+    command: ["python", "-m", "app.migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   postgres:
     image: postgres:15
@@ -32,6 +43,11 @@ services:
       - ./Databases/seed/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U innerloop_user -d innerloop_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   innerloop_postgres_data:

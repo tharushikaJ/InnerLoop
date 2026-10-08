@@ -21,7 +21,7 @@ function projectTone(status) {
   const value = normalized(status);
   if (COMPLETE.has(value)) return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   if (RISK.has(value)) return "bg-rose-50 text-rose-700 ring-rose-200";
-  if (["active", "in progress", "on track"].includes(value)) return "bg-blue-50 text-[#075fae] ring-blue-200";
+  if (["active",  "on track"].includes(value)) return "bg-blue-50 text-[#075fae] ring-blue-200";
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
@@ -44,12 +44,14 @@ function Metric({ icon: Icon, label, value, detail, tone = "blue" }) {
 
 function formFromProject(project, responsibleEmployeeId) {
   if (!project) return { ...emptyForm, responsible_employee_id: responsibleEmployeeId || "" };
-  return Object.fromEntries(Object.keys(emptyForm).map((field) => [
-    field,
-    field === "progress_percentage"
-      ? Number(project[field]) || 0
-      : project[field] ?? "",
-  ]));
+  return {
+    ...emptyForm,
+    ...project,
+    responsible_employee_id: project.responsible_employee_id || "",
+    assigned_intern_pod_id: project.assigned_intern_pod_id || "",
+    progress_percentage: Number(project.progress_percentage) || 0,
+    target_date: project.target_date || "",
+  };
 }
 
 function ProjectForm({ initialProject, options, responsibleEmployeeId, submitting, onSubmit, onClose }) {
@@ -147,7 +149,6 @@ export default function Projects() {
     try {
       await deleteProject(project.id);
       setProjects((current) => current.filter((item) => item.id !== project.id));
-      await load();
       setSuccess(`Project “${project.project_name}” deleted successfully.`);
     } catch (requestError) {
       setError(requestError.message || "Unable to delete project.");

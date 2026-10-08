@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -39,6 +40,8 @@ class Task(Base):
     priority: Mapped[str | None] = mapped_column(String(50))
 
     status: Mapped[str | None] = mapped_column(String(50))
+
+    progress_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0, nullable=False)
 
     due_date: Mapped[date | None] = mapped_column(Date)
 

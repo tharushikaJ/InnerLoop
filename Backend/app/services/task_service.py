@@ -8,7 +8,7 @@ from ..models.project import Project
 from ..models.intern_pod import InternPod
 from ..models.user import User
 from ..schemas.task_schema import TaskCreate, TaskSubmissionUpdate, TaskUpdate
-from .project_service import intern_pod_ids
+from .project_service import intern_pod_ids, intern_project_ids
 
 
 def tasks_for_user(db: Session, user: User) -> list[Task]:
@@ -18,9 +18,12 @@ def tasks_for_user(db: Session, user: User) -> list[Task]:
         query = query.filter(or_(Task.assigned_user_id == user.id, Task.project_id.in_(responsible_project_ids)))
     elif user.role == "intern":
         pod_ids = intern_pod_ids(db, user.id)
+        project_ids = intern_project_ids(db, user.id)
         conditions = [Task.assigned_user_id == user.id]
         if pod_ids:
             conditions.append(Task.assigned_intern_pod_id.in_(pod_ids))
+        if project_ids:
+            conditions.append(Task.project_id.in_(project_ids))
         query = query.filter(or_(*conditions))
     return query.order_by(Task.due_date.asc().nullslast(), Task.id.desc()).all()
 
@@ -36,7 +39,7 @@ def task_data(db: Session, task: Task) -> dict:
         "project_name": project_name,
         "assigned_user_name": user_name,
         "assigned_intern_pod_name": pod_name,
-        "submission_status": "Submitted" if task.completion_evidence_link or task.progress_note else "Not submitted",
+        "submission_status": "Submitted" if task.completion_evidence_link or task.progress_note or task.progress_percentage > 0 else "Not submitted",
     }
 
 
@@ -107,7 +110,12 @@ def _can_work_on_task(db: Session, task: Task, user: User) -> bool:
         responsible = task.project_id and db.query(Project.id).filter(Project.id == task.project_id, Project.responsible_employee_id == user.id).first()
         return task.assigned_user_id == user.id or bool(responsible)
     pod_ids = intern_pod_ids(db, user.id)
-    return task.assigned_user_id == user.id or task.assigned_intern_pod_id in pod_ids
+    project_ids = intern_project_ids(db, user.id)
+    return (
+        task.assigned_user_id == user.id
+        or task.assigned_intern_pod_id in pod_ids
+        or task.project_id in project_ids
+    )
 
 
 def update_task(db: Session, task_id: int, user: User, payload: TaskUpdate) -> dict:
@@ -147,6 +155,13 @@ def update_task_submission(
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(task, field, value)
+    if payload.progress_percentage is not None:
+        if payload.progress_percentage >= 100:
+            task.status = "Completed"
+        elif payload.progress_percentage > 10:
+            task.status = "In progress"
+        else:
+            task.status = "To do"
     db.commit()
     db.refresh(task)
     return task_data(db, task)

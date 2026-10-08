@@ -98,6 +98,7 @@ CREATE TABLE tasks (
 
     priority VARCHAR(50),
     status VARCHAR(50),
+    progress_percentage NUMERIC(5,2) NOT NULL DEFAULT 0,
 
     due_date DATE,
     progress_note TEXT,
@@ -107,6 +108,9 @@ CREATE TABLE tasks (
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT check_task_progress_percentage
+        CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
 
     CONSTRAINT fk_task_project
         FOREIGN KEY (project_id)
