@@ -227,7 +227,8 @@ CREATE TABLE meetings (
 
     CONSTRAINT fk_meeting_room
         FOREIGN KEY (meeting_room_id)
-        REFERENCES meeting_rooms(id),
+        REFERENCES meeting_rooms(id)
+        ON DELETE SET NULL,
 
     CONSTRAINT fk_meeting_creator
         FOREIGN KEY (created_by)

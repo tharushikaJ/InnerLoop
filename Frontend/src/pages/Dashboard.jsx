@@ -58,6 +58,21 @@ function TaskList({ tasks, emptyTitle = "No tasks assigned" }) {
   return <div className="divide-y divide-slate-100">{tasks.map((task) => <div className="flex items-start gap-3 py-4 first:pt-0 last:pb-0" key={task.id}><span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${DONE.has(normalized(task.status)) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#075fae]"}`}>{DONE.has(normalized(task.status)) ? <CheckCircle2 size={17} /> : <Clock3 size={17} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="truncate text-sm font-extrabold text-[#10233f]">{task.task_title}</p><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${toneForStatus(task.status)}`}>{task.status || "To do"}</span></div><p className="mt-1 truncate text-xs text-slate-400">{task.project_name || "Independent task"}{task.assigned_user_name ? ` · ${task.assigned_user_name}` : ""}</p><div className="mt-2 flex flex-wrap gap-3 text-[10px] font-bold text-slate-400"><span>{task.priority || "Normal"} priority</span><span>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</span></div></div></div>)}</div>;
 }
 
+function submissionStatus(task) {
+  return task.submission_status || (task.completion_evidence_link || task.progress_note ? "Submitted" : "Not submitted");
+}
+
+function InternTaskList({ tasks }) {
+  if (!tasks.length) return <EmptyState icon={CheckSquare} title="No tasks assigned" detail="New assigned work will appear here automatically." />;
+  return <div className="divide-y divide-slate-100">{tasks.map((task) => {
+    const submitted = submissionStatus(task) === "Submitted";
+    return <div className="py-4 first:pt-0 last:pb-0" key={task.id}>
+      <div className="flex items-start gap-3"><span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${DONE.has(normalized(task.status)) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#075fae]"}`}>{DONE.has(normalized(task.status)) ? <CheckCircle2 size={17} /> : <Clock3 size={17} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="truncate text-sm font-extrabold text-[#10233f]">{task.task_title}</p><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${submitted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{submissionStatus(task)}</span></div><p className="mt-1 truncate text-xs text-slate-400">{task.project_name || "Independent task"}</p><div className="mt-2 flex flex-wrap gap-3 text-[10px] font-bold text-slate-400"><span>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</span><span className={toneForStatus(task.status)}>{task.status || "To do"}</span></div></div></div>
+      <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-500"><span className="font-extrabold text-slate-600">Feedback / progress note:</span> {task.progress_note || "No feedback yet."}</div>
+    </div>;
+  })}</div>;
+}
+
 function MeetingList({ meetings }) {
   if (!meetings.length) return <EmptyState icon={CalendarDays} title="No upcoming meetings" detail="Scheduled meetings relevant to you will appear here." />;
   return <div className="space-y-3">{meetings.map((meeting) => <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4" key={meeting.id}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#075fae] shadow-sm"><CalendarDays size={18} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold text-[#10233f]">{meeting.meeting_title}</p><p className="mt-1 text-xs text-slate-400">{formatDate(meeting.start_datetime, true)} · {meeting.meeting_type || "Meeting"}</p></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${toneForStatus(meeting.status)}`}>{meeting.status || "Scheduled"}</span></div>)}</div>;
@@ -105,9 +120,9 @@ export default function Dashboard() {
     <section><div className="mb-4"><p className="eyebrow text-[#199d1c]">Live workspace data</p><h3 className="section-title">At a glance</h3></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">{metricCards.map(([Icon, label, value, detail, to, tone]) => <MetricCard key={label} icon={Icon} label={label} value={value ?? 0} detail={detail} to={to} tone={tone} />)}</div></section>
 
     <section className="grid gap-6 xl:grid-cols-2">
-      <article className="content-card"><SectionHeader eyebrow="Portfolio" title="Recent projects" to="/projects" linkLabel="All projects" /><ProjectList projects={data.projects || []} /></article>
+      <article className="content-card"><SectionHeader eyebrow="Portfolio" title={role === "intern" ? "Assigned projects" : "Recent projects"} to="/projects" linkLabel="All projects" /><ProjectList projects={data.projects || []} /></article>
       <article className="content-card"><SectionHeader eyebrow="Delivery calendar" title="Upcoming deadlines" to="/tasks" linkLabel="Task board" /><TaskList tasks={data.upcoming_deadlines || []} emptyTitle="No upcoming deadlines" /></article>
-      <article className="content-card"><SectionHeader eyebrow="Work queue" title={role === "management" ? "Recent tasks" : "Assigned tasks"} to="/tasks" linkLabel="All tasks" /><TaskList tasks={data.tasks || []} /></article>
+      <article className="content-card"><SectionHeader eyebrow={role === "intern" ? "Assigned work" : "Work queue"} title={role === "management" ? "Recent tasks" : "Assigned tasks"} to="/tasks" linkLabel="All tasks" />{role === "intern" ? <InternTaskList tasks={data.tasks || []} /> : <TaskList tasks={data.tasks || []} />}</article>
       {role !== "intern" && <article className="content-card"><SectionHeader eyebrow="Team calendar" title="Upcoming meetings" to="/meetings" linkLabel="All meetings" /><MeetingList meetings={data.meetings || []} /></article>}
     </section>
 
